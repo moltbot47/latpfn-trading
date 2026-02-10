@@ -12,7 +12,7 @@ from rich.panel import Panel
 from rich.columns import Columns
 from rich.text import Text
 
-from signal.shot_classifier import classify as classify_shot, get_tier_color, TIER_COLORS
+from signals.shot_classifier import classify as classify_shot, get_tier_color, TIER_COLORS
 
 logger = logging.getLogger(__name__)
 

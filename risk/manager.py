@@ -5,7 +5,7 @@ Risk manager: pre-trade validation gate between signal generation and execution.
 import logging
 from typing import Optional
 
-from signal.generator import TradingSignal
+from signals.generator import TradingSignal
 from risk.position_sizer import calculate_position_size
 from risk.circuit_breaker import CircuitBreaker
 

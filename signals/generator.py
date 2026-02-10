@@ -9,9 +9,9 @@ from typing import Optional
 
 import numpy as np
 
-from signal.confidence import score_confidence
-from signal.exits import calculate_exits
-from signal.shot_classifier import classify as classify_shot
+from signals.confidence import score_confidence
+from signals.exits import calculate_exits
+from signals.shot_classifier import classify as classify_shot
 
 logger = logging.getLogger(__name__)
 

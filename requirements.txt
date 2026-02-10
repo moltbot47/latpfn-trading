@@ -1,5 +1,5 @@
 # LaT-PFN model dependencies
-torch>=2.3.0
+torch>=2.0
 numpy>=1.24.0
 scipy>=1.10.0
 lightning>=2.1.4

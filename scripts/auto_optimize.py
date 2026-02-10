@@ -32,10 +32,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import load_config
 from data.yfinance_provider import fetch_ohlcv
 from model.wrapper import LaTPFNPredictor
-from signal.generator import SignalGenerator, TradingSignal
-from signal.confidence import score_confidence
-from signal.exits import calculate_exits
-from signal.shot_classifier import classify as classify_shot
+from signals.generator import SignalGenerator, TradingSignal
+from signals.confidence import score_confidence
+from signals.exits import calculate_exits
+from signals.shot_classifier import classify as classify_shot
 from scripts.sim_utils import simulate_trade
 
 # ── Parameter grid ────────────────────────────────────────────────────

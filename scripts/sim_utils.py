@@ -4,7 +4,7 @@ Shared simulation utilities for backtesting and optimization scripts.
 
 import numpy as np
 
-from signal.generator import TradingSignal
+from signals.generator import TradingSignal
 
 
 def simulate_trade(

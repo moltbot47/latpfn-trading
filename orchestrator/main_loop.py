@@ -22,7 +22,7 @@ except ImportError:
 from config import load_config
 from data.pipeline import DataPipeline
 from model.wrapper import LaTPFNPredictor
-from signal.generator import SignalGenerator
+from signals.generator import SignalGenerator
 from risk.manager import RiskManager
 from execution.tradovate_client import TradovateClient
 from execution.order_manager import OrderManager, Position
