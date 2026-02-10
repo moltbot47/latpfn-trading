@@ -78,7 +78,7 @@ instruments:
       - "^VIX"   # Volatility
 
 risk:
-  max_risk_per_trade_pct: 1.5    # 1.5% of account equity
+  max_risk_per_trade_pct: 2.0    # 2% of account equity ($1000 on $50k)
   max_position_size_contracts: 2
   max_daily_loss_pct: 3.0
   max_drawdown_pct: 10.0
@@ -94,11 +94,11 @@ risk:
     flatten_eod: true
 
 signal:
-  min_confidence: 0.30   # absolute floor (below this = no trade regardless of tier)
+  min_confidence: 0.25   # absolute floor (below this = no trade regardless of tier)
   regime_multipliers:
-    trending: 1.2
-    ranging: 0.8
-    volatile: 0.7
+    trending: 1.15
+    ranging: 0.95       # was 0.8 — too punitive since most markets range most of the time
+    volatile: 0.75
   weights:
     model_confidence: 0.4
     trend_clarity: 0.3
@@ -114,7 +114,7 @@ signal:
 shot_tiers:
   layup:
     label: "Layup"
-    confidence_min: 0.85       # 0.85+ confidence
+    confidence_min: 0.60       # composite 0.60+ (strong conviction)
     target_multiplier: 0.4     # 40% of base forecast target (very tight)
     stop_multiplier: 0.8       # 80% of base stop (tight protection)
     size_multiplier: 1.0       # full position
@@ -123,7 +123,7 @@ shot_tiers:
 
   short_range:
     label: "Short Range"
-    confidence_min: 0.75       # 0.75–0.85
+    confidence_min: 0.52       # composite 0.52–0.60
     target_multiplier: 0.6     # 60% of base target
     stop_multiplier: 0.9
     size_multiplier: 1.0
@@ -132,7 +132,7 @@ shot_tiers:
 
   free_throw:
     label: "Free Throw"
-    confidence_min: 0.65       # 0.65–0.75
+    confidence_min: 0.45       # composite 0.45–0.52
     target_multiplier: 0.8
     stop_multiplier: 1.0
     size_multiplier: 0.75      # 3/4 position
@@ -141,7 +141,7 @@ shot_tiers:
 
   three_pointer:
     label: "3-Pointer"
-    confidence_min: 0.55       # 0.55–0.65
+    confidence_min: 0.38       # composite 0.38–0.45
     target_multiplier: 1.2     # 120% of base (wider target)
     stop_multiplier: 1.2       # wider stop too
     size_multiplier: 0.5       # half position
@@ -150,7 +150,7 @@ shot_tiers:
 
   half_court:
     label: "Half Court"
-    confidence_min: 0.45       # 0.45–0.55
+    confidence_min: 0.32       # composite 0.32–0.38
     target_multiplier: 2.0     # 2x base target
     stop_multiplier: 1.5
     size_multiplier: 0.25      # quarter position
@@ -159,7 +159,7 @@ shot_tiers:
 
   hail_mary:
     label: "Hail Mary"
-    confidence_min: 0.30       # 0.30–0.45
+    confidence_min: 0.25       # composite 0.25–0.32
     target_multiplier: 3.5     # 3.5x base target (moonshot)
     stop_multiplier: 1.5
     size_multiplier: 0.15      # minimum position
