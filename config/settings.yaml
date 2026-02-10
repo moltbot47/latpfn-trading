@@ -1,0 +1,114 @@
+system:
+  mode: paper          # paper | live
+  environment: demo    # demo | production
+  log_level: INFO
+  log_dir: ./logs
+
+schedule:
+  prediction_interval_minutes: 5
+  market_hours:
+    # Futures trade nearly 24h; these are the most active hours
+    start: "09:30"
+    end: "16:00"
+    timezone: "America/New_York"
+  flatten_eod: true    # Close all positions end of day (prop firm safe)
+
+model:
+  device: auto         # auto | cuda | mps | cpu
+  weights_path: ./models/lat_pfn_checkpoint.ckpt
+  lat_pfn_repo: ./Lat-PFN
+  n_context: 16
+  n_heldout: 4
+  n_history: 180
+  n_prompt: 60
+  n_bins: 100
+  bin_range_min: -3.5
+  bin_range_max: 3.5
+
+instruments:
+  YM:
+    name: "E-Mini Dow Futures"
+    yfinance_ticker: "YM=F"
+    tradovate_symbol: "YM"
+    contract_size: 5       # $5 per point
+    tick_size: 1.0
+    tick_value: 5.0
+    context_assets:
+      - "SPY"    # S&P 500 ETF
+      - "DIA"    # Dow ETF
+      - "^VIX"   # Volatility Index
+      - "DX-Y.NYB"  # Dollar Index
+      - "^TNX"   # 10-Year Treasury Yield
+      - "XLF"    # Financial sector
+      - "XLI"    # Industrial sector
+      - "IWM"    # Russell 2000
+
+  NQ:
+    name: "E-Mini Nasdaq Futures"
+    yfinance_ticker: "NQ=F"
+    tradovate_symbol: "NQ"
+    contract_size: 20      # $20 per point
+    tick_size: 0.25
+    tick_value: 5.0
+    context_assets:
+      - "QQQ"    # Nasdaq ETF
+      - "SPY"    # S&P 500 ETF
+      - "^VIX"   # Volatility
+      - "^TNX"   # 10-Year Treasury
+      - "XLK"    # Technology sector
+      - "AAPL"   # Apple
+      - "MSFT"   # Microsoft
+      - "NVDA"   # NVIDIA
+
+  GC:
+    name: "Gold Futures"
+    yfinance_ticker: "GC=F"
+    tradovate_symbol: "GC"
+    contract_size: 100     # 100 troy oz
+    tick_size: 0.10
+    tick_value: 10.0
+    context_assets:
+      - "GLD"    # Gold ETF
+      - "SLV"    # Silver ETF
+      - "DX-Y.NYB"  # Dollar Index (inverse)
+      - "^TNX"   # 10-Year Treasury
+      - "TIP"    # TIPS (inflation)
+      - "DBC"    # Commodity Index
+      - "UUP"    # Dollar Bullish Fund
+      - "^VIX"   # Volatility
+
+risk:
+  max_risk_per_trade_pct: 1.5    # 1.5% of account equity
+  max_position_size_contracts: 2
+  max_daily_loss_pct: 3.0
+  max_drawdown_pct: 10.0
+  max_concurrent_positions: 3
+  stop_loss_atr_multiplier: 1.5
+  min_reward_risk_ratio: 1.5
+  trailing_stop_activation_pct: 2.0
+  trailing_stop_distance_pct: 1.0
+
+  prop_firm:
+    max_daily_loss_usd: 1000     # Adjust to your prop firm rules
+    max_total_drawdown_usd: 2000
+    flatten_eod: true
+
+signal:
+  min_confidence: 0.6
+  regime_multipliers:
+    trending: 1.2
+    ranging: 0.8
+    volatile: 0.7
+  weights:
+    model_confidence: 0.4
+    trend_clarity: 0.3
+    uncertainty_inverse: 0.3
+
+tradovate:
+  mode: demo
+  api_url: "https://demo.tradovateapi.com/v1"
+  md_url: "wss://md-demo.tradovateapi.com/v1/websocket"
+  ws_url: "wss://demo.tradovateapi.com/v1/websocket"
+  live_api_url: "https://live.tradovateapi.com/v1"
+  live_md_url: "wss://md.tradovateapi.com/v1/websocket"
+  live_ws_url: "wss://live.tradovateapi.com/v1/websocket"

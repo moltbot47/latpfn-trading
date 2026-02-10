@@ -1,0 +1,26 @@
+# Environment
+.env
+*.pyc
+__pycache__/
+*.egg-info/
+venv/
+.venv/
+
+# Model weights (large files)
+models/*.ckpt
+models/*.pt
+
+# Logs and state
+logs/
+state.json
+
+# LaT-PFN repo internals (we track it as a directory, not submodule)
+Lat-PFN/.git/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
