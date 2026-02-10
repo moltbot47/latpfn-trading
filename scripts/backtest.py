@@ -27,6 +27,7 @@ from model.wrapper import LaTPFNPredictor
 from signal.generator import SignalGenerator, TradingSignal
 from signal.exits import calculate_exits
 from risk.position_sizer import calculate_position_size
+from scripts.sim_utils import simulate_trade
 
 
 def run_backtest(
@@ -121,9 +122,7 @@ def run_backtest(
 
         future_prices = heldout_df["Close"].iloc[future_start:future_end].values
 
-        trade_result = _simulate_trade(
-            signal, future_prices, inst_cfg["contract_size"]
-        )
+        trade_result = simulate_trade(signal, future_prices, inst_cfg["contract_size"])
         if trade_result:
             trades.append(trade_result)
             status = "WIN" if trade_result["pnl"] > 0 else "LOSS"
@@ -139,43 +138,6 @@ def run_backtest(
     _print_summary(trades, account_equity, instrument)
 
 
-def _simulate_trade(
-    signal: TradingSignal,
-    future_prices: np.ndarray,
-    contract_size: float,
-) -> dict | None:
-    """Simulate a single trade through future price bars."""
-    if len(future_prices) == 0:
-        return None
-
-    entry = signal.entry_price
-    sl = signal.stop_loss
-    tp = signal.take_profit
-    is_long = signal.direction == "long"
-
-    for price in future_prices:
-        # Check stop loss
-        if is_long and price <= sl:
-            pnl = (sl - entry) * contract_size
-            return {"exit_price": sl, "pnl": pnl, "exit_reason": "stop_loss"}
-        if not is_long and price >= sl:
-            pnl = (entry - sl) * contract_size
-            return {"exit_price": sl, "pnl": pnl, "exit_reason": "stop_loss"}
-
-        # Check take profit
-        if is_long and price >= tp:
-            pnl = (tp - entry) * contract_size
-            return {"exit_price": tp, "pnl": pnl, "exit_reason": "take_profit"}
-        if not is_long and price <= tp:
-            pnl = (entry - tp) * contract_size
-            return {"exit_price": tp, "pnl": pnl, "exit_reason": "take_profit"}
-
-    # Exit at last price if neither SL nor TP hit
-    last = future_prices[-1]
-    pnl = (last - entry) * contract_size if is_long else (entry - last) * contract_size
-    return {"exit_price": float(last), "pnl": pnl, "exit_reason": "timeout"}
-
-
 def _print_summary(trades: list, account_equity: float, instrument: str):
     """Print backtest performance summary."""
     print(f"\n{'='*60}")
@@ -189,7 +151,7 @@ def _print_summary(trades: list, account_equity: float, instrument: str):
     pnls = [t["pnl"] for t in trades]
     wins = [p for p in pnls if p > 0]
     losses = [p for p in pnls if p <= 0]
-    exit_reasons = [t["exit_reason"] for t in trades]
+    exit_reasons = [t["reason"] for t in trades]
 
     total_pnl = sum(pnls)
     win_rate = len(wins) / len(pnls) * 100 if pnls else 0

@@ -62,7 +62,7 @@ def main():
     # Verify it loads
     try:
         import torch
-        state = torch.load(output_path, map_location="cpu")
+        state = torch.load(output_path, map_location="cpu", weights_only=False)  # checkpoint has non-tensor data
         n_params = sum(v.numel() for v in state["state_dict"].values())
         print(f"Verified: {n_params:,} parameters loaded successfully")
     except Exception as e:

@@ -12,6 +12,8 @@ from rich.panel import Panel
 from rich.columns import Columns
 from rich.text import Text
 
+from signal.shot_classifier import classify as classify_shot, get_tier_color, TIER_COLORS
+
 logger = logging.getLogger(__name__)
 
 console = Console()
@@ -48,8 +50,6 @@ def print_cycle_summary(
     pred_table.add_column("Shot Type")
     pred_table.add_column("Regime")
     pred_table.add_column("Forecast End")
-
-    from signal.shot_classifier import classify as classify_shot, get_tier_color
 
     for inst, pred in predictions.items():
         if pred is None:
@@ -118,8 +118,6 @@ def print_signal(instrument: str, signal):
     """Print a generated signal with shot-tier color coding."""
     if signal is None:
         return
-
-    from signal.shot_classifier import get_tier_color, TIER_COLORS
 
     dir_style = "green" if signal.direction == "long" else "red"
     tier_name = getattr(signal, "shot_type", "unknown")

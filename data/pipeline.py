@@ -4,6 +4,7 @@ normalizes, and formats data for the LaT-PFN model.
 """
 
 import logging
+import time
 from typing import Dict
 
 import numpy as np
@@ -14,13 +15,16 @@ from data.normalizer import normalize_values, normalize_time, NormStats
 
 logger = logging.getLogger(__name__)
 
+# Cache entries older than this (seconds) are refetched
+_CACHE_TTL_SECONDS = 270  # 4.5 minutes (just under 5-min prediction cycle)
+
 
 class DataPipeline:
     """Orchestrates data fetching and preparation for LaT-PFN."""
 
     def __init__(self, config: dict):
         self.config = config
-        self._cache: Dict[str, pd.DataFrame] = {}
+        self._cache: Dict[str, tuple[pd.DataFrame, float]] = {}  # (data, timestamp)
 
     def get_prediction_data(
         self,
@@ -71,11 +75,19 @@ class DataPipeline:
     def _fetch_cached(
         self, symbol: str, bars: int, interval: str
     ) -> pd.DataFrame:
-        """Fetch with simple in-memory cache."""
+        """Fetch with TTL-based in-memory cache."""
         key = f"{symbol}_{interval}"
-        if key not in self._cache or len(self._cache[key]) < bars:
-            self._cache[key] = fetch_ohlcv(symbol, bars=bars, interval=interval)
-        return self._cache[key]
+        now = time.monotonic()
+
+        if key in self._cache:
+            cached_df, cached_at = self._cache[key]
+            age = now - cached_at
+            if age < _CACHE_TTL_SECONDS and len(cached_df) >= bars:
+                return cached_df
+
+        df = fetch_ohlcv(symbol, bars=bars, interval=interval)
+        self._cache[key] = (df, now)
+        return df
 
     def clear_cache(self):
         self._cache.clear()

@@ -53,7 +53,9 @@ def fetch_ohlcv(
 
     # Flatten multi-level columns if present (yfinance sometimes returns them)
     if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
+        df = df.droplevel(level=1, axis=1)
+        # Remove any duplicate columns that result from flattening
+        df = df.loc[:, ~df.columns.duplicated()]
 
     # Keep only OHLCV
     df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()

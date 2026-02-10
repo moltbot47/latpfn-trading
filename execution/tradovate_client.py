@@ -55,9 +55,10 @@ class TradovateClient:
         )
 
     async def disconnect(self):
-        if self._session:
+        if self._session and not self._session.closed:
             await self._session.close()
-            self._session = None
+        self._session = None
+        self.access_token = None
 
     async def _authenticate(self):
         """POST /auth/accesstokenrequest to get bearer token."""
@@ -219,6 +220,9 @@ class TradovateClient:
     # ── HTTP helpers ──────────────────────────────────────────────────
 
     async def _get(self, path: str, params: dict = None) -> Optional[dict | list]:
+        if self._session is None or self.access_token is None:
+            logger.error("GET %s failed: not connected (call connect() first)", path)
+            return None
         headers = {"Authorization": f"Bearer {self.access_token}"}
         url = f"{self.api_url}{path}"
         try:
@@ -233,6 +237,9 @@ class TradovateClient:
             return None
 
     async def _post(self, path: str, payload: dict) -> Optional[dict]:
+        if self._session is None or self.access_token is None:
+            logger.error("POST %s failed: not connected (call connect() first)", path)
+            return None
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "Content-Type": "application/json",

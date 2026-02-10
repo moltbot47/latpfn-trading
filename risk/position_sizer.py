@@ -18,12 +18,12 @@ def calculate_position_size(
     """
     Determine how many contracts to trade.
 
-    risk_dollars = account_equity × max_risk_pct
-    risk_per_contract = |entry - stop| × contract_size
+    risk_dollars = account_equity x max_risk_pct
+    risk_per_contract = |entry - stop| x contract_size
     contracts = floor(risk_dollars / risk_per_contract)
 
     Args:
-        account_equity: Current account value.
+        account_equity: Current account value (must be > 0).
         entry_price:    Expected entry price.
         stop_loss:      Stop loss price.
         contract_size:  Dollar value per point (e.g. $5 for YM).
@@ -33,8 +33,14 @@ def calculate_position_size(
     Returns:
         Number of contracts (>= 1 if trade is viable, 0 if too risky).
     """
+    if account_equity <= 0 or contract_size <= 0 or max_risk_pct <= 0:
+        logger.warning("Invalid inputs: equity=%.2f contract_size=%.2f risk_pct=%.4f",
+                        account_equity, contract_size, max_risk_pct)
+        return 0
+
     price_risk = abs(entry_price - stop_loss)
-    if price_risk == 0:
+    if price_risk < 1e-10:  # avoid float division by ~zero
+        logger.warning("Stop loss too close to entry (distance=%.8f)", price_risk)
         return 0
 
     dollar_risk_per_contract = price_risk * contract_size

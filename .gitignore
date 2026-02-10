@@ -10,9 +10,10 @@ venv/
 models/*.ckpt
 models/*.pt
 
-# Logs and state
+# Logs, state, and reports
 logs/
 state.json
+reports/
 
 # LaT-PFN repo internals (we track it as a directory, not submodule)
 Lat-PFN/.git/

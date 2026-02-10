@@ -102,8 +102,8 @@ class LaTPFNPredictor:
                 "Run scripts/download_model.py first.",
                 weights_path,
             )
-            model.eval()
 
+        model.eval()
         return model
 
     # ── Prediction ────────────────────────────────────────────────────
@@ -150,6 +150,21 @@ class LaTPFNPredictor:
 
         forecast = processed["forecast_prices"]
         uncertainty = processed["uncertainty"]
+
+        # Validate model output — NaN/Inf would corrupt all downstream logic
+        if np.any(np.isnan(forecast)) or np.any(np.isinf(forecast)):
+            logger.error("Model produced NaN/Inf in forecast — returning neutral")
+            n = len(forecast)
+            current_price = float(heldout_df["Close"].iloc[-1])
+            return {
+                "forecast_prices": np.full(n, current_price),
+                "uncertainty": np.full(n, current_price * 0.01),
+                "direction": "neutral",
+                "confidence": 0.0,
+                "regime": "volatile",
+                "current_price": current_price,
+                "stats": close_stats,
+            }
 
         # Current price (last Close in history)
         current_price = float(heldout_df["Close"].iloc[-1])

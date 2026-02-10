@@ -16,9 +16,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
-def assess(report_path: str = None):
-    """Load optimization results and produce a trading readiness assessment."""
+def assess(report_path: str = None, account_equity: float = 50000.0):
+    """Load optimization results and produce a trading readiness assessment.
 
+    Args:
+        report_path: Path to optimization JSON. If None, uses latest.
+        account_equity: Account equity for drawdown % calculation.
+    """
     # Find latest report
     reports_dir = Path("./reports")
     if report_path:
@@ -89,7 +93,7 @@ def assess(report_path: str = None):
         checks.append(("Low win rate", False, f"{bm['win_rate']}%"))
 
     # 5. Max drawdown acceptable?
-    dd_pct = bm["max_drawdown"] / 50000 * 100  # assuming 50k equity
+    dd_pct = bm["max_drawdown"] / account_equity * 100
     if dd_pct < 5:
         checks.append(("Low drawdown", True, f"${bm['max_drawdown']:,.2f} ({dd_pct:.1f}%)"))
     elif dd_pct < 10:
@@ -204,5 +208,6 @@ def assess(report_path: str = None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Self-assess trading strategy viability")
     parser.add_argument("--report", type=str, default=None, help="Path to optimization JSON")
+    parser.add_argument("--equity", type=float, default=50000, help="Account equity for drawdown %")
     args = parser.parse_args()
-    assess(args.report)
+    assess(args.report, account_equity=args.equity)

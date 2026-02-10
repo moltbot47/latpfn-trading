@@ -94,6 +94,11 @@ def format_inputs(
         ctx_prompt_V.append(v_norm[n_history:])
 
     # Pad / duplicate to have at least min_context series
+    if not ctx_history_V:
+        raise ValueError(
+            "No valid context series available. Need at least 1 context asset "
+            f"with {total} bars. Check context_assets config and data availability."
+        )
     while len(ctx_history_V) < min_context:
         ctx_history_V.append(ctx_history_V[0])
         ctx_prompt_V.append(ctx_prompt_V[0])

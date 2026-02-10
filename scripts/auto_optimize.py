@@ -36,6 +36,7 @@ from signal.generator import SignalGenerator, TradingSignal
 from signal.confidence import score_confidence
 from signal.exits import calculate_exits
 from signal.shot_classifier import classify as classify_shot
+from scripts.sim_utils import simulate_trade
 
 # ── Parameter grid ────────────────────────────────────────────────────
 
@@ -119,40 +120,12 @@ def run_single_backtest(
             break
 
         future_prices = heldout_df["Close"].iloc[future_start:future_end].values
-        result = _simulate_trade(signal, future_prices, inst_cfg["contract_size"])
+        result = simulate_trade(signal, future_prices, inst_cfg["contract_size"])
         if result:
             result["shot_type"] = getattr(signal, "shot_type", "unknown")
             trades.append(result)
 
     return _calculate_metrics(trades, account_equity)
-
-
-def _simulate_trade(
-    signal: TradingSignal,
-    future_prices: np.ndarray,
-    contract_size: float,
-) -> dict | None:
-    if len(future_prices) == 0:
-        return None
-
-    entry = signal.entry_price
-    sl = signal.stop_loss
-    tp = signal.take_profit
-    is_long = signal.direction == "long"
-
-    for price in future_prices:
-        if is_long and price <= sl:
-            return {"pnl": (sl - entry) * contract_size, "reason": "stop_loss"}
-        if not is_long and price >= sl:
-            return {"pnl": (entry - sl) * contract_size, "reason": "stop_loss"}
-        if is_long and price >= tp:
-            return {"pnl": (tp - entry) * contract_size, "reason": "take_profit"}
-        if not is_long and price <= tp:
-            return {"pnl": (entry - tp) * contract_size, "reason": "take_profit"}
-
-    last = future_prices[-1]
-    pnl = (last - entry) * contract_size if is_long else (entry - last) * contract_size
-    return {"pnl": pnl, "reason": "timeout"}
 
 
 # ── Metrics ───────────────────────────────────────────────────────────

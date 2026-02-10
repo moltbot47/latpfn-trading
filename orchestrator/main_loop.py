@@ -14,6 +14,11 @@ import asyncio
 import logging
 from datetime import datetime, time as dtime
 
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
+
 from config import load_config
 from data.pipeline import DataPipeline
 from model.wrapper import LaTPFNPredictor
@@ -206,9 +211,11 @@ class TradingSystem:
                 logger.warning("Contract lookup failed for %s: %s", instrument, e)
 
     def _is_market_hours(self) -> bool:
-        """Check if we're within configured trading hours."""
-        now = datetime.now()
+        """Check if we're within configured trading hours (timezone-aware)."""
         schedule = self.config["schedule"]["market_hours"]
+        tz_name = schedule.get("timezone", "America/New_York")
+        tz = ZoneInfo(tz_name)
+        now = datetime.now(tz)
         start = dtime.fromisoformat(schedule["start"])
         end = dtime.fromisoformat(schedule["end"])
         # Weekday check (Mon=0, Fri=4)

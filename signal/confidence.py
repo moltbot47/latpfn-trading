@@ -60,4 +60,4 @@ def score_confidence(
     multipliers = signal_config["regime_multipliers"]
     regime_mult = multipliers.get(regime, 1.0)
 
-    return float(min(raw_score * regime_mult, 1.0))
+    return float(max(0.0, min(raw_score * regime_mult, 1.0)))

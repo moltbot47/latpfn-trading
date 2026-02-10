@@ -54,16 +54,16 @@ def calculate_exits(
         stop_loss = entry_price - stop_distance
         # Conservative target: forecast end minus uncertainty, scaled by tier
         raw_target = forecast_end - far_unc * 0.5
-        target_distance = (raw_target - entry_price) * target_multiplier
+        raw_distance = raw_target - entry_price
+        # Ensure positive target distance (forecast may be below entry)
+        target_distance = max(raw_distance, stop_distance * 0.5) * target_multiplier
         take_profit = entry_price + target_distance
-        # Ensure target is above entry
-        take_profit = max(take_profit, entry_price + stop_distance * 0.5)
     else:
         stop_loss = entry_price + stop_distance
         raw_target = forecast_end + far_unc * 0.5
-        target_distance = (entry_price - raw_target) * target_multiplier
+        raw_distance = entry_price - raw_target
+        target_distance = max(raw_distance, stop_distance * 0.5) * target_multiplier
         take_profit = entry_price - target_distance
-        take_profit = min(take_profit, entry_price - stop_distance * 0.5)
 
     # Enforce minimum reward:risk
     risk = abs(entry_price - stop_loss)

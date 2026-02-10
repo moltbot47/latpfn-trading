@@ -11,7 +11,7 @@ import numpy as np
 
 from signal.confidence import score_confidence
 from signal.exits import calculate_exits
-from signal.shot_classifier import classify as classify_shot, get_tier_color
+from signal.shot_classifier import classify as classify_shot
 
 logger = logging.getLogger(__name__)
 
