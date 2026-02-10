@@ -166,6 +166,20 @@ shot_tiers:
     min_reward_risk: 5.0
     enabled: false             # disabled by default — lottery ticket
 
+# ── Execution Mode ───────────────────────────────────────────────
+# pickmytrade = webhook to PickMyTrade (works with Apex prop firm)
+# tradovate   = direct Tradovate API (requires paid API access)
+# dry_run     = predictions only, no orders placed
+execution:
+  mode: dry_run        # pickmytrade | tradovate | dry_run
+  default_equity: 50000  # used when broker can't report balance
+
+pickmytrade:
+  webhook_url: "https://api.pickmytrade.trade/v2/add-trade-data"
+  # Credentials loaded from environment variables:
+  #   PICKMYTRADE_TOKEN      — your webhook token from pickmytrade.trade
+  #   PICKMYTRADE_ACCOUNT_ID — your account ID from pickmytrade.trade
+
 tradovate:
   mode: demo
   api_url: "https://demo.tradovateapi.com/v1"

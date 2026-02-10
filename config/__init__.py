@@ -51,6 +51,14 @@ def load_config(path: str = None) -> dict:
         "cid": cid,
     }
 
+    # Overlay PickMyTrade credentials from environment
+    config.setdefault("pickmytrade", {})
+    config["pickmytrade"]["token"] = os.getenv("PICKMYTRADE_TOKEN", "")
+    config["pickmytrade"]["account_id"] = os.getenv("PICKMYTRADE_ACCOUNT_ID", "")
+    config["pickmytrade"].setdefault(
+        "webhook_url", "https://api.pickmytrade.trade/v2/add-trade-data"
+    )
+
     # Resolve environment overrides
     env = os.getenv("ENVIRONMENT")
     if env:

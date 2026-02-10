@@ -6,7 +6,7 @@ Every ``prediction_interval_minutes`` minutes:
   2. Run LaT-PFN prediction
   3. Generate trading signals
   4. Validate through risk manager
-  5. Execute via Tradovate
+  5. Execute via webhook (PickMyTrade) or Tradovate API
   6. Update dashboard
 """
 
@@ -24,12 +24,28 @@ from market_data.pipeline import DataPipeline
 from forecaster.wrapper import LaTPFNPredictor
 from signals.generator import SignalGenerator
 from risk.manager import RiskManager
-from execution.tradovate_client import TradovateClient
 from execution.order_manager import OrderManager, Position
 from monitoring import dashboard
 from monitoring.logger import setup_logging
 
 logger = logging.getLogger(__name__)
+
+
+def _create_executor(config: dict):
+    """Instantiate the execution client based on config['execution']['mode']."""
+    mode = config.get("execution", {}).get("mode", "dry_run")
+
+    if mode == "pickmytrade":
+        from execution.webhook_client import WebhookClient
+        logger.info("Execution mode: PickMyTrade webhook")
+        return WebhookClient(config)
+    elif mode == "tradovate":
+        from execution.tradovate_client import TradovateClient
+        logger.info("Execution mode: Tradovate direct API")
+        return TradovateClient(config)
+    else:
+        logger.info("Execution mode: dry_run (predictions only)")
+        return None
 
 
 class TradingSystem:
@@ -45,12 +61,14 @@ class TradingSystem:
         self.model = LaTPFNPredictor(config)
         self.signal_gen = SignalGenerator(config)
         self.risk_mgr = RiskManager(config)
-        self.tradovate = TradovateClient(config)
+        self.executor = _create_executor(config)
         self.order_mgr = OrderManager()
 
         # State
         self.cycle = 0
-        self.account_equity = 0.0
+        self.account_equity = config.get("execution", {}).get(
+            "default_equity", 50000
+        )
         self.is_running = False
 
         # Contract symbol cache (root → active contract)
@@ -61,22 +79,35 @@ class TradingSystem:
         setup_logging(self.config)
         dashboard.print_header(self.config)
 
-        # Connect to Tradovate
-        try:
-            await self.tradovate.connect()
-            self.account_equity = await self.tradovate.get_cash_balance()
+        # Connect executor
+        if self.executor:
+            try:
+                await self.executor.connect()
+                balance = await self.executor.get_cash_balance()
+                if balance > 0:
+                    self.account_equity = balance
+                self.risk_mgr.set_account_state(
+                    starting_equity=self.account_equity,
+                    current_equity=self.account_equity,
+                    realized_pnl_today=0.0,
+                )
+                logger.info("Account equity: $%.2f", self.account_equity)
+            except Exception as e:
+                logger.error("Failed to connect executor: %s", e)
+                logger.info("Running in prediction-only mode (no execution)")
+                self.executor = None
+        else:
+            # dry_run mode — still initialize risk manager with default equity
             self.risk_mgr.set_account_state(
                 starting_equity=self.account_equity,
                 current_equity=self.account_equity,
                 realized_pnl_today=0.0,
             )
-            logger.info("Account equity: $%.2f", self.account_equity)
-        except Exception as e:
-            logger.error("Failed to connect to Tradovate: %s", e)
-            logger.info("Running in prediction-only mode (no execution)")
+            logger.info("Dry-run mode — equity: $%.2f", self.account_equity)
 
-        # Resolve contract symbols
-        await self._resolve_contracts()
+        # Resolve contract symbols (only needed for direct Tradovate API)
+        if self.executor and hasattr(self.executor, 'find_contract'):
+            await self._resolve_contracts()
 
         # Main loop
         self.is_running = True
@@ -166,14 +197,19 @@ class TradingSystem:
         if not approved or signal is None:
             return prediction
 
-        # 6. Execute
-        contract_symbol = self._contract_cache.get(instrument)
-        if not contract_symbol:
-            logger.error("%s: no contract symbol resolved", instrument)
+        # 6. Execute (if executor is available)
+        if not self.executor:
+            logger.info("%s: signal approved but no executor (dry_run)", instrument)
             return prediction
 
-        result = await self.tradovate.place_bracket_order(
-            symbol=contract_symbol,
+        # Resolve symbol: use contract cache if available, else root symbol
+        exec_symbol = self._contract_cache.get(
+            instrument,
+            self.config["instruments"][instrument]["tradovate_symbol"],
+        )
+
+        result = await self.executor.place_bracket_order(
+            symbol=exec_symbol,
             direction=signal.direction,
             quantity=signal.position_size,
             entry_price=signal.entry_price,
@@ -201,7 +237,7 @@ class TradingSystem:
         for instrument in self.instruments:
             tv_symbol = self.config["instruments"][instrument]["tradovate_symbol"]
             try:
-                contract = await self.tradovate.find_contract(tv_symbol)
+                contract = await self.executor.find_contract(tv_symbol)
                 if contract:
                     self._contract_cache[instrument] = contract
                     logger.info("%s → %s", instrument, contract)
@@ -228,13 +264,14 @@ class TradingSystem:
         logger.info("Shutting down trading system...")
         self.is_running = False
 
-        # Flatten positions if configured
-        if self.config["schedule"].get("flatten_eod"):
+        # Flatten positions if configured and executor available
+        if self.executor and self.config["schedule"].get("flatten_eod"):
             try:
-                await self.tradovate.flatten_position()
+                await self.executor.flatten_position()
                 logger.info("All positions flattened")
             except Exception as e:
                 logger.error("Failed to flatten positions: %s", e)
 
-        await self.tradovate.disconnect()
+        if self.executor:
+            await self.executor.disconnect()
         logger.info("Shutdown complete")

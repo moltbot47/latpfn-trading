@@ -41,8 +41,7 @@ def main():
     config = load_config(args.config)
 
     if args.dry_run:
-        config["tradovate"]["credentials"]["username"] = ""
-        config["tradovate"]["credentials"]["password"] = ""
+        config.setdefault("execution", {})["mode"] = "dry_run"
 
     system = TradingSystem(config)
     asyncio.run(system.start())
