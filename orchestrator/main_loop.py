@@ -254,10 +254,16 @@ class TradingSystem:
         now = datetime.now(tz)
         start = dtime.fromisoformat(schedule["start"])
         end = dtime.fromisoformat(schedule["end"])
-        # Weekday check (Mon=0, Fri=4)
-        if now.weekday() > 4:
+        # Weekday check (Mon=0, Sun=6) — futures closed Sat, open Sun evening
+        if now.weekday() == 5:  # Saturday
             return False
-        return start <= now.time() <= end
+        t = now.time()
+        if start <= end:
+            # Same-day window (e.g. 09:30–16:00)
+            return start <= t <= end
+        else:
+            # Overnight window (e.g. 18:00–17:00 wraps past midnight)
+            return t >= start or t <= end
 
     async def shutdown(self):
         """Graceful shutdown."""

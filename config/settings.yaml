@@ -7,9 +7,9 @@ system:
 schedule:
   prediction_interval_minutes: 5
   market_hours:
-    # Futures trade nearly 24h; these are the most active hours
-    start: "09:30"
-    end: "16:00"
+    # CME Globex: Sun 6PM – Fri 5PM ET (1hr break 5-6PM daily)
+    start: "18:00"
+    end: "17:00"
     timezone: "America/New_York"
   flatten_eod: true    # Close all positions end of day (prop firm safe)
 
@@ -26,13 +26,13 @@ model:
   bin_range_max: 3.5
 
 instruments:
-  YM:
-    name: "E-Mini Dow Futures"
-    yfinance_ticker: "YM=F"
-    tradovate_symbol: "YM"
-    contract_size: 5       # $5 per point
+  MYM:
+    name: "Micro E-Mini Dow Futures"
+    yfinance_ticker: "YM=F"         # same price as full-size
+    tradovate_symbol: "MYM"
+    contract_size: 0.50     # $0.50 per point (1/10th of YM)
     tick_size: 1.0
-    tick_value: 5.0
+    tick_value: 0.50
     context_assets:
       - "SPY"    # S&P 500 ETF
       - "DIA"    # Dow ETF
@@ -43,13 +43,13 @@ instruments:
       - "XLI"    # Industrial sector
       - "IWM"    # Russell 2000
 
-  NQ:
-    name: "E-Mini Nasdaq Futures"
-    yfinance_ticker: "NQ=F"
-    tradovate_symbol: "NQ"
-    contract_size: 20      # $20 per point
+  MNQ:
+    name: "Micro E-Mini Nasdaq Futures"
+    yfinance_ticker: "NQ=F"         # same price as full-size
+    tradovate_symbol: "MNQ"
+    contract_size: 2        # $2 per point (1/10th of NQ)
     tick_size: 0.25
-    tick_value: 5.0
+    tick_value: 0.50
     context_assets:
       - "QQQ"    # Nasdaq ETF
       - "SPY"    # S&P 500 ETF
@@ -60,13 +60,13 @@ instruments:
       - "MSFT"   # Microsoft
       - "NVDA"   # NVIDIA
 
-  GC:
-    name: "Gold Futures"
-    yfinance_ticker: "GC=F"
-    tradovate_symbol: "GC"
-    contract_size: 100     # 100 troy oz
+  MGC:
+    name: "Micro Gold Futures"
+    yfinance_ticker: "GC=F"         # same price as full-size
+    tradovate_symbol: "MGC"
+    contract_size: 10       # $10 per point (1/10th of GC)
     tick_size: 0.10
-    tick_value: 10.0
+    tick_value: 1.0
     context_assets:
       - "GLD"    # Gold ETF
       - "SLV"    # Silver ETF
@@ -79,7 +79,7 @@ instruments:
 
 risk:
   max_risk_per_trade_pct: 2.0    # 2% of account equity ($1000 on $50k)
-  max_position_size_contracts: 2
+  max_position_size_contracts: 5   # micros are 1/10th size, can safely trade more
   max_daily_loss_pct: 3.0
   max_drawdown_pct: 10.0
   max_concurrent_positions: 3

@@ -368,7 +368,7 @@ def generate_report(
 
 def main():
     parser = argparse.ArgumentParser(description="LaT-PFN Auto-Optimizer")
-    parser.add_argument("--instrument", type=str, default="NQ", choices=["YM", "NQ", "GC"])
+    parser.add_argument("--instrument", type=str, default="MNQ", choices=["MYM", "MNQ", "MGC", "YM", "NQ", "GC"])
     parser.add_argument("--all", action="store_true", help="Run for all instruments")
     parser.add_argument("--days", type=int, default=30)
     parser.add_argument("--interval", type=str, default="5m")

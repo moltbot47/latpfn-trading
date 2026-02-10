@@ -9,10 +9,14 @@ import yfinance as yf
 logger = logging.getLogger(__name__)
 
 # Map our internal instrument names to yfinance tickers
+# Micro contracts (MYM, MNQ, MGC) use same yfinance data as full-size
 TICKER_MAP = {
     "YM": "YM=F",
     "NQ": "NQ=F",
     "GC": "GC=F",
+    "MYM": "YM=F",
+    "MNQ": "NQ=F",
+    "MGC": "GC=F",
 }
 
 

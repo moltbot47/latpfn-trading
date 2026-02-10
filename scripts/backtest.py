@@ -186,7 +186,7 @@ def _max_drawdown(pnls: list) -> float:
 
 def main():
     parser = argparse.ArgumentParser(description="LaT-PFN Trading Backtest")
-    parser.add_argument("--instrument", type=str, default="NQ", choices=["YM", "NQ", "GC"])
+    parser.add_argument("--instrument", type=str, default="MNQ", choices=["MYM", "MNQ", "MGC", "YM", "NQ", "GC"])
     parser.add_argument("--days", type=int, default=30, help="Days of history to backtest")
     parser.add_argument("--interval", type=str, default="5m", help="Candle interval")
     parser.add_argument("--equity", type=float, default=50000, help="Starting account equity")
