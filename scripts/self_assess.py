@@ -150,6 +150,44 @@ def assess(report_path: str = None):
               f"${bm['total_pnl']:+,.2f} P&L, "
               f"{bm['sharpe']} Sharpe")
 
+    # ── Per-tier assessment ────────────────────────────────────
+    per_tier = bm.get("per_tier", {})
+    if per_tier:
+        print()
+        print("─" * 60)
+        print("  SHOT-TIER ASSESSMENT")
+        print("─" * 60)
+        print()
+        for tier, tm in sorted(per_tier.items(), key=lambda x: x[1].get("total_pnl", 0), reverse=True):
+            ev_positive = tm.get("total_pnl", 0) > 0
+            has_trades = tm.get("count", 0) >= 3
+            tier_label = tier.replace("_", " ").title()
+
+            if ev_positive and has_trades:
+                tier_verdict = "GO"
+                icon = "[PASS]"
+            elif not has_trades:
+                tier_verdict = "INSUFFICIENT DATA"
+                icon = "[SKIP]"
+            else:
+                tier_verdict = "NO-GO (EV-negative)"
+                icon = "[FAIL]"
+
+            print(
+                f"  {icon}  {tier_label:<16}  {tier_verdict}"
+                f"  —  {tm.get('count', 0)} trades, "
+                f"${tm.get('total_pnl', 0):+,.2f} P&L, "
+                f"{tm.get('win_rate', 0):.1f}% win, "
+                f"PF={tm.get('profit_factor', 0):.2f}"
+            )
+
+        ev_negative_tiers = [t for t, m in per_tier.items() if m.get("total_pnl", 0) <= 0 and m.get("count", 0) >= 3]
+        if ev_negative_tiers:
+            print()
+            print(f"  RECOMMENDATION: Disable these tiers in config/settings.yaml:")
+            for t in ev_negative_tiers:
+                print(f"    shot_tiers.{t}.enabled: false")
+
     print("=" * 60)
 
     # Return structured result

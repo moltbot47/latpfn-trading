@@ -139,9 +139,15 @@ class TradingSystem:
             prediction["confidence"], prediction["regime"],
         )
 
-        # 4. Generate signal
+        # 4. Generate signal (includes NBA shot-tier classification)
         signal = self.signal_gen.generate(instrument, prediction)
         dashboard.print_signal(instrument, signal)
+
+        # Annotate prediction with shot type for dashboard display
+        if signal is not None:
+            prediction["shot_type"] = signal.shot_type
+        else:
+            prediction["shot_type"] = ""
 
         if signal is None:
             return prediction

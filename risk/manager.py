@@ -71,18 +71,30 @@ class RiskManager:
             max_contracts=self.risk_cfg["max_position_size_contracts"],
         )
 
+        # Apply shot-tier size multiplier (Layup=1.0, Half Court=0.25, etc.)
+        size_mult = getattr(signal, "size_multiplier", 1.0)
+        if size_mult < 1.0:
+            scaled = int(contracts * size_mult)
+            # Floor to at least 1 if base contracts > 0, else 0
+            contracts = max(scaled, 1) if contracts > 0 and size_mult > 0 else scaled
+            logger.info(
+                "%s [%s]: size_multiplier=%.2f → %d contracts",
+                signal.instrument, signal.shot_type, size_mult, contracts,
+            )
+
         if contracts == 0:
-            return False, None, "Position size too small (risk exceeds per-trade limit)"
+            return False, None, f"Position size zero after {signal.shot_type} sizing (size_mult={size_mult:.2f})"
 
         # Update signal with validated size
         signal.position_size = contracts
 
         logger.info(
-            "RISK APPROVED: %s %s %d contracts  risk=$%.2f",
+            "RISK APPROVED [%s]: %s %s %d contracts  risk=$%.2f",
+            signal.shot_type,
             signal.instrument,
             signal.direction,
             contracts,
             abs(signal.entry_price - signal.stop_loss) * inst_cfg["contract_size"] * contracts,
         )
 
-        return True, signal, "Approved"
+        return True, signal, f"Approved ({signal.shot_type})"

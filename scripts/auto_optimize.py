@@ -35,6 +35,7 @@ from model.wrapper import LaTPFNPredictor
 from signal.generator import SignalGenerator, TradingSignal
 from signal.confidence import score_confidence
 from signal.exits import calculate_exits
+from signal.shot_classifier import classify as classify_shot
 
 # ── Parameter grid ────────────────────────────────────────────────────
 
@@ -120,6 +121,7 @@ def run_single_backtest(
         future_prices = heldout_df["Close"].iloc[future_start:future_end].values
         result = _simulate_trade(signal, future_prices, inst_cfg["contract_size"])
         if result:
+            result["shot_type"] = getattr(signal, "shot_type", "unknown")
             trades.append(result)
 
     return _calculate_metrics(trades, account_equity)
@@ -155,6 +157,28 @@ def _simulate_trade(
 
 # ── Metrics ───────────────────────────────────────────────────────────
 
+def _per_tier_metrics(trades: list) -> dict:
+    """Calculate per shot-tier metrics breakdown."""
+    from collections import defaultdict
+    tiers = defaultdict(list)
+    for t in trades:
+        tier = t.get("shot_type", "unknown")
+        tiers[tier].append(t["pnl"])
+
+    breakdown = {}
+    for tier, pnls in tiers.items():
+        wins = [p for p in pnls if p > 0]
+        losses = [p for p in pnls if p <= 0]
+        breakdown[tier] = {
+            "count": len(pnls),
+            "win_rate": round(len(wins) / len(pnls) * 100, 1) if pnls else 0,
+            "total_pnl": round(sum(pnls), 2),
+            "avg_pnl": round(np.mean(pnls), 2) if pnls else 0,
+            "profit_factor": round(abs(sum(wins) / sum(losses)), 2) if losses and sum(losses) != 0 else 99.0,
+        }
+    return breakdown
+
+
 def _calculate_metrics(trades: list, account_equity: float) -> dict:
     """Calculate comprehensive performance metrics."""
     if not trades:
@@ -164,6 +188,7 @@ def _calculate_metrics(trades: list, account_equity: float) -> dict:
             "max_drawdown": 0, "avg_win": 0, "avg_loss": 0,
             "return_pct": 0, "score": 0,
             "tp_count": 0, "sl_count": 0, "timeout_count": 0,
+            "per_tier": {},
         }
 
     pnls = [t["pnl"] for t in trades]
@@ -220,6 +245,7 @@ def _calculate_metrics(trades: list, account_equity: float) -> dict:
         "tp_count": sum(1 for t in trades if t["reason"] == "take_profit"),
         "sl_count": sum(1 for t in trades if t["reason"] == "stop_loss"),
         "timeout_count": sum(1 for t in trades if t["reason"] == "timeout"),
+        "per_tier": _per_tier_metrics(trades),
     }
 
 
@@ -283,6 +309,23 @@ def generate_report(
         lines.append(f"      P&L:     ${m['total_pnl']:+,.2f}  ({m['return_pct']:+.2f}%)")
         lines.append(f"      Sharpe:  {m['sharpe']}  |  Sortino: {m['sortino']}  |  Max DD: ${m['max_drawdown']:,.2f}")
         lines.append(f"      Exits:   TP={m['tp_count']}  SL={m['sl_count']}  Timeout={m['timeout_count']}")
+
+    # ── Per-tier breakdown for the best config ──────────────────
+    best_tiers = best["metrics"].get("per_tier", {})
+    if best_tiers:
+        lines.append("")
+        lines.append("─" * 70)
+        lines.append("  SHOT-TIER BREAKDOWN (Best Config)")
+        lines.append("─" * 70)
+        lines.append(f"  {'Tier':<16} {'Count':>6} {'Win%':>7} {'P&L':>12} {'Avg P&L':>10} {'PF':>6}")
+        lines.append("  " + "─" * 58)
+        for tier, tm in sorted(best_tiers.items(), key=lambda x: x[1]["total_pnl"], reverse=True):
+            ev_tag = " EV+" if tm["total_pnl"] > 0 else " EV-"
+            lines.append(
+                f"  {tier:<16} {tm['count']:>6} {tm['win_rate']:>6.1f}% "
+                f"${tm['total_pnl']:>+10,.2f} ${tm['avg_pnl']:>+8,.2f} "
+                f"{tm['profit_factor']:>5.2f}{ev_tag}"
+            )
 
     lines.append("")
     lines.append("─" * 70)

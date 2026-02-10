@@ -45,12 +45,15 @@ def print_cycle_summary(
     pred_table.add_column("Instrument", style="bold")
     pred_table.add_column("Direction")
     pred_table.add_column("Confidence")
+    pred_table.add_column("Shot Type")
     pred_table.add_column("Regime")
     pred_table.add_column("Forecast End")
 
+    from signal.shot_classifier import classify as classify_shot, get_tier_color
+
     for inst, pred in predictions.items():
         if pred is None:
-            pred_table.add_row(inst, "[dim]no data[/]", "", "", "")
+            pred_table.add_row(inst, "[dim]no data[/]", "", "", "", "")
             continue
 
         dir_style = {"long": "green", "short": "red", "neutral": "dim"}.get(
@@ -59,10 +62,20 @@ def print_cycle_summary(
         conf_bar = _bar(pred["confidence"])
         forecast_end = f"${pred['forecast_prices'][-1]:.2f}" if len(pred["forecast_prices"]) > 0 else "—"
 
+        # Show shot tier classification for this confidence level
+        shot_type = pred.get("shot_type", "")
+        if not shot_type:
+            shot_type = "—"
+            shot_style = "dim"
+        else:
+            shot_style = get_tier_color(shot_type)
+            shot_type = shot_type.replace("_", " ").title()
+
         pred_table.add_row(
             inst,
             f"[{dir_style}]{pred['direction'].upper()}[/]",
             conf_bar,
+            f"[{shot_style}]{shot_type}[/]",
             pred["regime"],
             forecast_end,
         )
@@ -102,12 +115,21 @@ def print_cycle_summary(
 
 
 def print_signal(instrument: str, signal):
-    """Print a generated signal."""
+    """Print a generated signal with shot-tier color coding."""
     if signal is None:
         return
+
+    from signal.shot_classifier import get_tier_color, TIER_COLORS
+
     dir_style = "green" if signal.direction == "long" else "red"
+    tier_name = getattr(signal, "shot_type", "unknown")
+    tier_color = get_tier_color(tier_name)
+
+    # Shot tier label
+    tier_label = tier_name.replace("_", " ").title()
+
     console.print(
-        f"  [bold {dir_style}]SIGNAL[/] {instrument} "
+        f"  [bold {dir_style}]SIGNAL[/] [{tier_color}]{tier_label}[/] {instrument} "
         f"{signal.direction.upper()} {signal.position_size} "
         f"@ ${signal.entry_price:.2f}  "
         f"SL=${signal.stop_loss:.2f}  TP=${signal.take_profit:.2f}  "

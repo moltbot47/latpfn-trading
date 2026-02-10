@@ -94,7 +94,7 @@ risk:
     flatten_eod: true
 
 signal:
-  min_confidence: 0.6
+  min_confidence: 0.30   # absolute floor (below this = no trade regardless of tier)
   regime_multipliers:
     trending: 1.2
     ranging: 0.8
@@ -103,6 +103,68 @@ signal:
     model_confidence: 0.4
     trend_clarity: 0.3
     uncertainty_inverse: 0.3
+
+# ── NBA Shot-Tier Classification ──────────────────────────────────
+# Each tier maps a confidence range to specific trade parameters.
+# Higher confidence → tighter target + full size (bread & butter).
+# Lower confidence  → wider target + smaller size (occasional windfall).
+# All tiers should be EV-positive: Win% × Target > Loss% × Stop.
+# Disable any tier by setting enabled: false.
+
+shot_tiers:
+  layup:
+    label: "Layup"
+    confidence_min: 0.85       # 0.85+ confidence
+    target_multiplier: 0.4     # 40% of base forecast target (very tight)
+    stop_multiplier: 0.8       # 80% of base stop (tight protection)
+    size_multiplier: 1.0       # full position
+    min_reward_risk: 1.0       # accept 1:1 R:R (high win rate compensates)
+    enabled: true
+
+  short_range:
+    label: "Short Range"
+    confidence_min: 0.75       # 0.75–0.85
+    target_multiplier: 0.6     # 60% of base target
+    stop_multiplier: 0.9
+    size_multiplier: 1.0
+    min_reward_risk: 1.2
+    enabled: true
+
+  free_throw:
+    label: "Free Throw"
+    confidence_min: 0.65       # 0.65–0.75
+    target_multiplier: 0.8
+    stop_multiplier: 1.0
+    size_multiplier: 0.75      # 3/4 position
+    min_reward_risk: 1.5
+    enabled: true
+
+  three_pointer:
+    label: "3-Pointer"
+    confidence_min: 0.55       # 0.55–0.65
+    target_multiplier: 1.2     # 120% of base (wider target)
+    stop_multiplier: 1.2       # wider stop too
+    size_multiplier: 0.5       # half position
+    min_reward_risk: 2.0
+    enabled: true
+
+  half_court:
+    label: "Half Court"
+    confidence_min: 0.45       # 0.45–0.55
+    target_multiplier: 2.0     # 2x base target
+    stop_multiplier: 1.5
+    size_multiplier: 0.25      # quarter position
+    min_reward_risk: 3.0
+    enabled: false             # disabled by default — enable after backtest validates
+
+  hail_mary:
+    label: "Hail Mary"
+    confidence_min: 0.30       # 0.30–0.45
+    target_multiplier: 3.5     # 3.5x base target (moonshot)
+    stop_multiplier: 1.5
+    size_multiplier: 0.15      # minimum position
+    min_reward_risk: 5.0
+    enabled: false             # disabled by default — lottery ticket
 
 tradovate:
   mode: demo
