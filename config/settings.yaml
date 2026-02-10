@@ -180,6 +180,14 @@ pickmytrade:
   #   PICKMYTRADE_TOKEN      — your webhook token from pickmytrade.trade
   #   PICKMYTRADE_ACCOUNT_ID — your account ID from pickmytrade.trade
 
+# ── Discord Bot ──────────────────────────────────────────────────
+# Posts signals, cycle summaries, and accepts slash commands.
+# Credentials loaded from environment variables:
+#   DISCORD_BOT_TOKEN   — bot token from discord.com/developers
+#   DISCORD_CHANNEL_ID  — channel ID for signal posting
+discord:
+  channel_id: "1470827087085441078"   # Trading Pilot channel
+
 tradovate:
   mode: demo
   api_url: "https://demo.tradovateapi.com/v1"

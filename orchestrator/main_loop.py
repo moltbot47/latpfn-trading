@@ -74,6 +74,9 @@ class TradingSystem:
         # Contract symbol cache (root → active contract)
         self._contract_cache: dict[str, str] = {}
 
+        # Discord bot (set externally by discord_bot.runner)
+        self.discord_bot = None
+
     async def start(self):
         """Initialize connections and run the main loop."""
         setup_logging(self.config)
@@ -145,6 +148,19 @@ class TradingSystem:
                 daily_pnl=self.order_mgr.realized_pnl_today,
             )
 
+            # Discord cycle summary
+            if self.discord_bot:
+                try:
+                    await self.discord_bot.post_cycle_summary(
+                        cycle=self.cycle,
+                        predictions=predictions,
+                        positions=self.order_mgr.open_positions,
+                        account_equity=self.account_equity,
+                        daily_pnl=self.order_mgr.realized_pnl_today,
+                    )
+                except Exception:
+                    pass
+
             # Wait for next cycle
             logger.info("Next cycle in %d minutes", self.interval)
             await asyncio.sleep(self.interval * 60)
@@ -195,7 +211,20 @@ class TradingSystem:
         dashboard.print_risk_decision(instrument, approved, reason)
 
         if not approved or signal is None:
+            # Notify Discord of rejection
+            if self.discord_bot and signal is not None:
+                try:
+                    await self.discord_bot.post_risk_rejection(instrument, reason)
+                except Exception:
+                    pass
             return prediction
+
+        # Notify Discord of approved signal
+        if self.discord_bot:
+            try:
+                await self.discord_bot.post_signal(instrument, signal, prediction)
+            except Exception:
+                pass
 
         # 6. Execute (if executor is available)
         if not self.executor:
@@ -218,6 +247,13 @@ class TradingSystem:
         )
 
         dashboard.print_order_result(instrument, result)
+
+        # Notify Discord of execution result
+        if self.discord_bot:
+            try:
+                await self.discord_bot.post_execution(instrument, result, signal)
+            except Exception:
+                pass
 
         if result and "orderId" in result:
             self.order_mgr.add_position(Position(

@@ -59,6 +59,13 @@ def load_config(path: str = None) -> dict:
         "webhook_url", "https://api.pickmytrade.trade/v2/add-trade-data-latest"
     )
 
+    # Overlay Discord bot credentials from environment
+    config.setdefault("discord", {})
+    config["discord"]["bot_token"] = os.getenv("DISCORD_BOT_TOKEN", "")
+    config["discord"].setdefault(
+        "channel_id", os.getenv("DISCORD_CHANNEL_ID", "")
+    )
+
     # Resolve environment overrides
     env = os.getenv("ENVIRONMENT")
     if env:
