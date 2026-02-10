@@ -171,11 +171,11 @@ shot_tiers:
 # tradovate   = direct Tradovate API (requires paid API access)
 # dry_run     = predictions only, no orders placed
 execution:
-  mode: dry_run        # pickmytrade | tradovate | dry_run
+  mode: pickmytrade    # pickmytrade | tradovate | dry_run
   default_equity: 50000  # used when broker can't report balance
 
 pickmytrade:
-  webhook_url: "https://api.pickmytrade.trade/v2/add-trade-data"
+  webhook_url: "https://api.pickmytrade.trade/v2/add-trade-data-latest"
   # Credentials loaded from environment variables:
   #   PICKMYTRADE_TOKEN      — your webhook token from pickmytrade.trade
   #   PICKMYTRADE_ACCOUNT_ID — your account ID from pickmytrade.trade
