@@ -10,8 +10,8 @@ from typing import Dict
 import numpy as np
 import pandas as pd
 
-from data.yfinance_provider import fetch_ohlcv
-from data.normalizer import normalize_values, normalize_time, NormStats
+from market_data.yfinance_provider import fetch_ohlcv
+from market_data.normalizer import normalize_values, normalize_time, NormStats
 
 logger = logging.getLogger(__name__)
 

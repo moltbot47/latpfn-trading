@@ -6,7 +6,7 @@ point forecasts and uncertainty estimates in original price space.
 import numpy as np
 import torch
 
-from data.normalizer import NormStats, denormalize_values
+from market_data.normalizer import NormStats, denormalize_values
 
 # Default bin configuration (must match model training)
 N_BINS = 100

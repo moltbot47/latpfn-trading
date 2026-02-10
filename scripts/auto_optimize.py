@@ -30,8 +30,8 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from config import load_config
-from data.yfinance_provider import fetch_ohlcv
-from model.wrapper import LaTPFNPredictor
+from market_data.yfinance_provider import fetch_ohlcv
+from forecaster.wrapper import LaTPFNPredictor
 from signals.generator import SignalGenerator, TradingSignal
 from signals.confidence import score_confidence
 from signals.exits import calculate_exits

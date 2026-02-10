@@ -14,9 +14,9 @@ import numpy as np
 import pandas as pd
 import torch
 
-from data.normalizer import NormStats
-from model.input_formatter import format_inputs
-from model.output_processor import process_forecast
+from market_data.normalizer import NormStats
+from forecaster.input_formatter import format_inputs
+from forecaster.output_processor import process_forecast
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +45,9 @@ class LaTPFNPredictor:
         self.n_prompt = mcfg["n_prompt"]
 
         # Add repo to path so we can import LaT-PFN internals
-        repo_path = str(Path(mcfg["lat_pfn_repo"]).resolve())
-        if repo_path not in sys.path:
-            sys.path.insert(0, repo_path)
+        self.repo_path = str(Path(mcfg["lat_pfn_repo"]).resolve())
+        if self.repo_path not in sys.path:
+            sys.path.insert(0, self.repo_path)
 
         self.model = self._load_model(mcfg)
         logger.info("LaT-PFN model loaded on %s", self.device)
@@ -58,7 +58,6 @@ class LaTPFNPredictor:
         """Build architecture and load pretrained weights."""
         from util.config_util import dotdict, ShapeConfig
         from initialiser import build_model
-        from util.persist import load_model
 
         # Reconstruct the config the model expects
         lat_config = dotdict(
@@ -81,20 +80,40 @@ class LaTPFNPredictor:
             width=8,
         )
 
-        # Build model architecture
-        model = build_model(
-            width=lat_config.width,
-            config=lat_config,
-            n_outputs=mcfg["n_bins"],
-            use_mup_parametrization=lat_config.mup,
-            load_base_shapes=True,
-            build_base_shapes=True,
-        )
+        # Build model architecture (must cd into Lat-PFN repo for MuP shapes path)
+        import os
+        original_cwd = os.getcwd()
+        os.chdir(self.repo_path)
+        try:
+            model = build_model(
+                width=lat_config.width,
+                config=lat_config,
+                n_outputs=mcfg["n_bins"],
+                use_mup_parametrization=lat_config.mup,
+                load_base_shapes=True,
+                build_base_shapes=True,
+            )
+        finally:
+            os.chdir(original_cwd)
 
-        # Load pretrained weights
+        # Load pretrained weights (handle CUDA→CPU mapping ourselves)
         weights_path = Path(mcfg["weights_path"])
         if weights_path.exists():
-            model = load_model(str(weights_path), model, self.device)
+            checkpoint = torch.load(
+                str(weights_path),
+                map_location=self.device,
+                weights_only=False,
+            )
+            state_dict = checkpoint["state_dict"]
+            # Strip "module" prefix and filter mask keys (same as LaT-PFN's persist.py)
+            prefix = "module"
+            state_dict = {
+                k[len(prefix):]: v
+                for k, v in state_dict.items()
+                if not ("mask" in k and "pfn" in k)
+            }
+            model.load_state_dict(state_dict)
+            model.to(self.device)
             logger.info("Loaded weights from %s", weights_path)
         else:
             logger.warning(
@@ -138,12 +157,20 @@ class LaTPFNPredictor:
             n_prompt=self.n_prompt,
         )
 
-        # Move tensors to device
-        device_tensors = {k: v.to(self.device) for k, v in tensors.items()}
+        # Move tensors to device; duplicate batch dim (model requires batch > 1)
+        device_tensors = {}
+        for k, v in tensors.items():
+            t = v.to(self.device)
+            if t.shape[0] == 1:
+                t = t.repeat(2, *([1] * (t.dim() - 1)))
+            device_tensors[k] = t
 
         # Run model inference
         with torch.no_grad():
             raw_output = self.model.create_forecast(**device_tensors)
+
+        # Take only the first batch element
+        raw_output = {k: v[:1] for k, v in raw_output.items()}
 
         # Process output → prices and uncertainty
         processed = process_forecast(raw_output, close_stats, heldout_idx=3)

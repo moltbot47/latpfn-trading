@@ -15,8 +15,8 @@ logs/
 state.json
 reports/
 
-# LaT-PFN repo internals (we track it as a directory, not submodule)
-Lat-PFN/.git/
+# LaT-PFN cloned repo (external dependency, not part of our project)
+Lat-PFN/
 
 # OS
 .DS_Store

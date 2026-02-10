@@ -20,8 +20,8 @@ except ImportError:
     from backports.zoneinfo import ZoneInfo
 
 from config import load_config
-from data.pipeline import DataPipeline
-from model.wrapper import LaTPFNPredictor
+from market_data.pipeline import DataPipeline
+from forecaster.wrapper import LaTPFNPredictor
 from signals.generator import SignalGenerator
 from risk.manager import RiskManager
 from execution.tradovate_client import TradovateClient

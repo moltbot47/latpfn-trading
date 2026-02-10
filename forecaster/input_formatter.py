@@ -29,7 +29,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from data.normalizer import normalize_values, normalize_time, NormStats
+from market_data.normalizer import normalize_values, normalize_time, NormStats
 
 # Columns used as the 4 heldout series for the target instrument
 HELDOUT_COLS = ["Open", "High", "Low", "Close"]
