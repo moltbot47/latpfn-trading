@@ -60,6 +60,40 @@ instruments:
       - "MSFT"   # Microsoft
       - "NVDA"   # NVIDIA
 
+  MES:
+    name: "Micro E-Mini S&P 500 Futures"
+    yfinance_ticker: "ES=F"
+    tradovate_symbol: "MES"
+    contract_size: 5.0        # $5 per point (1/10th of ES)
+    tick_size: 0.25
+    tick_value: 1.25
+    context_assets:
+      - "SPY"    # S&P 500 ETF
+      - "DIA"    # Dow ETF
+      - "QQQ"    # Nasdaq ETF
+      - "^VIX"   # Volatility Index
+      - "^TNX"   # 10-Year Treasury Yield
+      - "XLF"    # Financial sector
+      - "XLK"    # Technology sector
+      - "IWM"    # Russell 2000
+
+  M2K:
+    name: "Micro Russell 2000 Futures"
+    yfinance_ticker: "RTY=F"
+    tradovate_symbol: "M2K"
+    contract_size: 5.0        # $5 per point (1/10th of RTY)
+    tick_size: 0.10
+    tick_value: 0.50
+    context_assets:
+      - "IWM"    # Russell 2000 ETF
+      - "SPY"    # S&P 500 ETF
+      - "^VIX"   # Volatility Index
+      - "^TNX"   # 10-Year Treasury Yield
+      - "XLF"    # Financial sector
+      - "XLI"    # Industrial sector
+      - "XLK"    # Technology sector
+      - "KRE"    # Regional Banks ETF
+
   # MGC: TEMPORARILY DISABLED — Apex halted all metals (GC, SI, MGC, HG, PL, PA)
   # due to market volatility. Re-enable when Apex lifts the restriction.
   # MGC:

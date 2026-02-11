@@ -92,6 +92,9 @@ class TradingSystem:
         setup_logging(self.config)
         dashboard.print_header(self.config)
 
+        # Restore any persisted positions from a previous run
+        self.order_mgr.load_state()
+
         # Connect executor
         if self.executor:
             try:

@@ -74,4 +74,12 @@ def load_config(path: str = None) -> dict:
     if log_level:
         config["system"]["log_level"] = log_level
 
+    # Account equity override from environment (actual Tradovate balance)
+    equity_env = os.getenv("ACCOUNT_EQUITY")
+    if equity_env:
+        try:
+            config.setdefault("execution", {})["default_equity"] = float(equity_env)
+        except ValueError:
+            logger.warning("ACCOUNT_EQUITY is not a valid number: %s", equity_env)
+
     return config
