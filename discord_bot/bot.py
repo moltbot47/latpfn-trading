@@ -63,6 +63,8 @@ class TradingBot(commands.Bot):
         self.tree.add_command(tiers_cmd)
         self.tree.add_command(close_cmd)
         self.tree.add_command(closeall_cmd)
+        self.tree.add_command(performance_cmd)
+        self.tree.add_command(daily_cmd)
         await self.tree.sync()
         logger.info("Slash commands synced")
 
@@ -435,3 +437,102 @@ async def closeall_cmd(interaction: discord.Interaction):
         await interaction.followup.send(embed=embed)
     except Exception as e:
         await interaction.followup.send(f"Flatten failed: {e}")
+
+
+@app_commands.command(name="performance", description="Show per-tier performance stats (last 30 days)")
+async def performance_cmd(interaction: discord.Interaction):
+    bot = get_bot()
+    if not bot or not bot._trading_system:
+        await interaction.response.send_message("Trading system not connected.", ephemeral=True)
+        return
+
+    ts = bot._trading_system
+    tier_stats = ts.trade_logger.get_tier_stats(days=30)
+
+    if not tier_stats:
+        await interaction.response.send_message("No trade data available for the last 30 days.", ephemeral=True)
+        return
+
+    embed = discord.Embed(
+        title="Tier Performance (30 Days)",
+        color=0x2ECC71,
+        timestamp=datetime.now(timezone.utc),
+    )
+
+    for tier_name, stats in tier_stats.items():
+        label = tier_name.replace("_", " ").title()
+        pf_display = (
+            f"{stats['profit_factor']:.2f}"
+            if stats["profit_factor"] != float("inf")
+            else "Inf"
+        )
+        embed.add_field(
+            name=label,
+            value=(
+                f"Trades: {stats['count']}  |  "
+                f"Win Rate: {stats['win_rate']:.0%}\n"
+                f"Total P&L: ${stats['total_pnl']:+,.2f}  |  "
+                f"Avg P&L: ${stats['avg_pnl']:+,.2f}\n"
+                f"Profit Factor: {pf_display}  |  "
+                f"Expectancy: ${stats['expectancy']:+,.2f}"
+            ),
+            inline=False,
+        )
+
+    embed.set_footer(text="LaT-PFN Trading System")
+    await interaction.response.send_message(embed=embed)
+
+
+@app_commands.command(name="daily", description="Show today's trading summary")
+async def daily_cmd(interaction: discord.Interaction):
+    bot = get_bot()
+    if not bot or not bot._trading_system:
+        await interaction.response.send_message("Trading system not connected.", ephemeral=True)
+        return
+
+    ts = bot._trading_system
+    summary = ts.trade_logger.get_daily_summary()
+
+    if not summary:
+        await interaction.response.send_message("No trade data available for today.", ephemeral=True)
+        return
+
+    pnl_color = 0x2ECC71 if summary["total_pnl"] >= 0 else 0xE74C3C
+
+    embed = discord.Embed(
+        title=f"Daily Summary — {summary['date']}",
+        color=pnl_color,
+        timestamp=datetime.now(timezone.utc),
+    )
+
+    embed.add_field(name="Trades", value=str(summary["trade_count"]), inline=True)
+    embed.add_field(name="Executed", value=str(summary["executed_count"]), inline=True)
+    embed.add_field(name="Win Rate", value=f"{summary['win_rate']:.0%}", inline=True)
+
+    embed.add_field(name="Wins", value=str(summary["win_count"]), inline=True)
+    embed.add_field(name="Losses", value=str(summary["loss_count"]), inline=True)
+    embed.add_field(name="Total P&L", value=f"${summary['total_pnl']:+,.2f}", inline=True)
+
+    embed.add_field(name="Best Trade", value=f"${summary['best_trade']:+,.2f}", inline=True)
+    embed.add_field(name="Worst Trade", value=f"${summary['worst_trade']:+,.2f}", inline=True)
+    embed.add_field(name="Avg R:R", value=f"{summary['avg_rr']:.2f}", inline=True)
+
+    # Per-tier breakdown
+    by_tier = summary.get("by_tier", {})
+    if by_tier:
+        tier_lines = []
+        for tier_name, tier_data in by_tier.items():
+            label = tier_name.replace("_", " ").title()
+            wr = f"{tier_data.get('win_rate', 0):.0%}"
+            tier_lines.append(
+                f"**{label}**: {tier_data['count']} trades, "
+                f"{wr} win rate, ${tier_data['pnl']:+,.2f}"
+            )
+        embed.add_field(
+            name="By Tier",
+            value="\n".join(tier_lines) if tier_lines else "N/A",
+            inline=False,
+        )
+
+    embed.set_footer(text="LaT-PFN Trading System")
+    await interaction.response.send_message(embed=embed)

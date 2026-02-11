@@ -11,7 +11,9 @@ Every ``prediction_interval_minutes`` minutes:
 """
 
 import asyncio
+import json
 import logging
+import os
 from datetime import datetime, time as dtime
 
 try:
@@ -93,6 +95,10 @@ class TradingSystem:
 
         # Discord bot (set externally by discord_bot.runner)
         self.discord_bot = None
+        self._discord_fail_count = 0
+
+        # Daily P&L auto-reset tracking
+        self._current_trading_date = None
 
     async def start(self):
         """Initialize connections and run the main loop."""
@@ -101,6 +107,9 @@ class TradingSystem:
 
         # Restore any persisted positions from a previous run
         self.order_mgr.load_state()
+
+        # Restore drawdown floor from previous run (BEFORE main loop, AFTER ApexCompliance init)
+        self.apex.load_drawdown_state()
 
         # Connect executor
         if self.executor:
@@ -160,7 +169,12 @@ class TradingSystem:
                     logger.warning("APEX FLATTEN: 4:55 PM ET — closing all positions")
                     if self.executor:
                         try:
-                            await self.executor.flatten_position()
+                            result = await self.executor.flatten_position()
+                            if result is None:
+                                logger.warning(
+                                    "Flatten webhook returned None — broker may not have received flatten. "
+                                    "Proceeding with local close_all since this is an emergency flatten."
+                                )
                         except Exception as e:
                             logger.error("Flatten failed: %s", e)
                     self.order_mgr.close_all()
@@ -169,13 +183,28 @@ class TradingSystem:
                             await self.discord_bot._signal_channel.send(
                                 "@here **APEX AUTO-FLATTEN** — All positions closed (4:55 PM ET cutoff)"
                             )
-                        except Exception:
-                            pass
+                            self._discord_fail_count = 0
+                        except Exception as e:
+                            self._discord_fail_count += 1
+                            if self._discord_fail_count <= 3:
+                                logger.warning("Discord post failed (%d): %s", self._discord_fail_count, e)
+                            elif self._discord_fail_count == 4:
+                                logger.error("Discord appears disconnected — alerts not being delivered")
                 await asyncio.sleep(60)
                 continue
 
             self.cycle += 1
+            self._write_heartbeat("cycle_start")
             predictions = {}
+
+            # Daily P&L auto-reset
+            tz_name = self.config["schedule"]["market_hours"].get("timezone", "America/New_York")
+            tz = ZoneInfo(tz_name)
+            today = datetime.now(tz).date()
+            if self._current_trading_date is not None and today != self._current_trading_date:
+                logger.info("New trading day %s — resetting daily P&L", today)
+                self.order_mgr.reset_daily_pnl()
+            self._current_trading_date = today
 
             # Update trailing drawdown tracking BEFORE processing instruments
             # so the risk manager has the latest cushion data for sizing
@@ -264,9 +293,22 @@ class TradingSystem:
 
                         if pa["action"] == "close":
                             # Close via webhook + track locally
+                            # Only remove position from local tracking if webhook succeeds
+                            # (or if there's no executor — position monitor inferred exits)
+                            webhook_ok = True
                             if self.executor:
                                 exec_sym = self._contract_cache.get(inst, inst_cfg.get("tradovate_symbol", inst))
-                                await self.executor.close_position(exec_sym)
+                                close_result = await self.executor.close_position(exec_sym)
+                                if close_result is None:
+                                    webhook_ok = False
+                                    logger.error(
+                                        "CLOSE WEBHOOK FAILED for %s — position NOT removed from tracking. "
+                                        "Will retry next cycle.",
+                                        inst,
+                                    )
+
+                            if not webhook_ok:
+                                continue  # skip local close — retry next cycle
 
                             pnl = self.order_mgr.close_position(
                                 instrument=inst,
@@ -287,8 +329,13 @@ class TradingSystem:
                                         f"Est. P&L: ${pnl:+.2f}\n"
                                         f"*{pa['reason']}*"
                                     )
-                                except Exception:
-                                    pass
+                                    self._discord_fail_count = 0
+                                except Exception as e:
+                                    self._discord_fail_count += 1
+                                    if self._discord_fail_count <= 3:
+                                        logger.warning("Discord post failed (%d): %s", self._discord_fail_count, e)
+                                    elif self._discord_fail_count == 4:
+                                        logger.error("Discord appears disconnected — alerts not being delivered")
 
                         elif pa["action"] == "tighten_stop":
                             # Can't modify stops via PickMyTrade webhook —
@@ -310,8 +357,13 @@ class TradingSystem:
                                         f"\u26A0\uFE0F *Manual action needed — "
                                         f"PickMyTrade cannot modify existing stops.*"
                                     )
-                                except Exception:
-                                    pass
+                                    self._discord_fail_count = 0
+                                except Exception as e:
+                                    self._discord_fail_count += 1
+                                    if self._discord_fail_count <= 3:
+                                        logger.warning("Discord post failed (%d): %s", self._discord_fail_count, e)
+                                    elif self._discord_fail_count == 4:
+                                        logger.error("Discord appears disconnected — alerts not being delivered")
                 except Exception as e:
                     logger.error("Profit-taking check failed: %s", e)
 
@@ -345,8 +397,13 @@ class TradingSystem:
                                     f"Est. P&L: ${pnl:+.2f}\n"
                                     f"*{ex['note']}*"
                                 )
-                            except Exception:
-                                pass
+                                self._discord_fail_count = 0
+                            except Exception as e:
+                                self._discord_fail_count += 1
+                                if self._discord_fail_count <= 3:
+                                    logger.warning("Discord post failed (%d): %s", self._discord_fail_count, e)
+                                elif self._discord_fail_count == 4:
+                                    logger.error("Discord appears disconnected — alerts not being delivered")
                 except Exception as e:
                     logger.error("Position exit check failed: %s", e)
 
@@ -370,8 +427,13 @@ class TradingSystem:
                         daily_pnl=self.order_mgr.realized_pnl_today,
                         drawdown_status=dd_status,
                     )
-                except Exception:
-                    pass
+                    self._discord_fail_count = 0
+                except Exception as e:
+                    self._discord_fail_count += 1
+                    if self._discord_fail_count <= 3:
+                        logger.warning("Discord post failed (%d): %s", self._discord_fail_count, e)
+                    elif self._discord_fail_count == 4:
+                        logger.error("Discord appears disconnected — alerts not being delivered")
 
             # Discord radar — instruments approaching trade thresholds
             if self.discord_bot:
@@ -379,8 +441,16 @@ class TradingSystem:
                     radar_items = self._build_radar(predictions)
                     if radar_items:
                         await self.discord_bot.post_radar(radar_items)
-                except Exception:
-                    pass
+                    self._discord_fail_count = 0
+                except Exception as e:
+                    self._discord_fail_count += 1
+                    if self._discord_fail_count <= 3:
+                        logger.warning("Discord post failed (%d): %s", self._discord_fail_count, e)
+                    elif self._discord_fail_count == 4:
+                        logger.error("Discord appears disconnected — alerts not being delivered")
+
+            # Heartbeat at end of cycle
+            self._write_heartbeat("cycle_end")
 
             # Wait for next cycle
             logger.info("Next cycle in %d minutes", self.interval)
@@ -496,8 +566,13 @@ class TradingSystem:
             if self.discord_bot and signal is not None:
                 try:
                     await self.discord_bot.post_risk_rejection(instrument, reason)
-                except Exception:
-                    pass
+                    self._discord_fail_count = 0
+                except Exception as e:
+                    self._discord_fail_count += 1
+                    if self._discord_fail_count <= 3:
+                        logger.warning("Discord post failed (%d): %s", self._discord_fail_count, e)
+                    elif self._discord_fail_count == 4:
+                        logger.error("Discord appears disconnected — alerts not being delivered")
             return
 
         # Apex compliance
@@ -518,8 +593,13 @@ class TradingSystem:
             if self.discord_bot:
                 try:
                     await self.discord_bot.post_risk_rejection(instrument, f"[APEX] {apex_reason}")
-                except Exception:
-                    pass
+                    self._discord_fail_count = 0
+                except Exception as e:
+                    self._discord_fail_count += 1
+                    if self._discord_fail_count <= 3:
+                        logger.warning("Discord post failed (%d): %s", self._discord_fail_count, e)
+                    elif self._discord_fail_count == 4:
+                        logger.error("Discord appears disconnected — alerts not being delivered")
             return
 
         # Portfolio exposure check
@@ -540,8 +620,13 @@ class TradingSystem:
             if self.discord_bot:
                 try:
                     await self.discord_bot.post_risk_rejection(instrument, f"[EXPOSURE] {exp_reason}")
-                except Exception:
-                    pass
+                    self._discord_fail_count = 0
+                except Exception as e:
+                    self._discord_fail_count += 1
+                    if self._discord_fail_count <= 3:
+                        logger.warning("Discord post failed (%d): %s", self._discord_fail_count, e)
+                    elif self._discord_fail_count == 4:
+                        logger.error("Discord appears disconnected — alerts not being delivered")
             return
 
         # Confirmation mode (PA/Live accounts)
@@ -563,8 +648,13 @@ class TradingSystem:
             if self.discord_bot:
                 try:
                     await self.discord_bot.post_signal(instrument, signal, prediction)
-                except Exception:
-                    pass
+                    self._discord_fail_count = 0
+                except Exception as e:
+                    self._discord_fail_count += 1
+                    if self._discord_fail_count <= 3:
+                        logger.warning("Discord post failed (%d): %s", self._discord_fail_count, e)
+                    elif self._discord_fail_count == 4:
+                        logger.error("Discord appears disconnected — alerts not being delivered")
 
         # Execute
         if not self.executor:
@@ -607,8 +697,13 @@ class TradingSystem:
         if self.discord_bot:
             try:
                 await self.discord_bot.post_execution(instrument, result, signal)
-            except Exception:
-                pass
+                self._discord_fail_count = 0
+            except Exception as e:
+                self._discord_fail_count += 1
+                if self._discord_fail_count <= 3:
+                    logger.warning("Discord post failed (%d): %s", self._discord_fail_count, e)
+                elif self._discord_fail_count == 4:
+                    logger.error("Discord appears disconnected — alerts not being delivered")
 
         # Log trade
         dd_status_now = self.apex.get_drawdown_status(self.account_equity)
@@ -641,6 +736,27 @@ class TradingSystem:
                 order_id=result["orderId"],
                 trade_log_id=trade_log_id,
             ))
+
+    def _write_heartbeat(self, status: str):
+        """Write a heartbeat file for external monitoring."""
+        heartbeat_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "data", "heartbeat.json",
+        )
+        try:
+            os.makedirs(os.path.dirname(heartbeat_path), exist_ok=True)
+            payload = {
+                "cycle": self.cycle,
+                "status": status,
+                "timestamp": datetime.now().isoformat(timespec="seconds"),
+                "instruments": len(self.instruments),
+            }
+            tmp_path = heartbeat_path + ".tmp"
+            with open(tmp_path, "w") as f:
+                json.dump(payload, f)
+            os.replace(tmp_path, heartbeat_path)
+        except Exception as e:
+            logger.warning("Failed to write heartbeat: %s", e)
 
     def _build_radar(self, predictions: dict) -> list:
         """

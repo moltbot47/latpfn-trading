@@ -3,6 +3,8 @@ Historical OHLCV data provider using Yahoo Finance (free).
 """
 
 import logging
+import time
+
 import pandas as pd
 import yfinance as yf
 
@@ -46,16 +48,38 @@ def fetch_ohlcv(
 
     logger.info("Fetching %s (%s) — %dd of %s bars", symbol, ticker, period_days, interval)
 
-    df = yf.download(
-        ticker,
-        period=f"{period_days}d",
-        interval=interval,
-        progress=False,
-        auto_adjust=True,
-    )
+    max_retries = 3
+    last_error = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            df = yf.download(
+                ticker,
+                period=f"{period_days}d",
+                interval=interval,
+                progress=False,
+                auto_adjust=True,
+            )
 
-    if df.empty:
-        raise ValueError(f"No data returned for {ticker} ({interval})")
+            if df.empty:
+                raise ValueError(f"No data returned for {ticker} ({interval})")
+
+            # Success — break out of retry loop
+            break
+        except Exception as e:
+            last_error = e
+            if attempt < max_retries:
+                backoff = 2 ** (attempt - 1)  # 1s, 2s, 4s
+                logger.warning(
+                    "yfinance fetch attempt %d/%d failed for %s (%s: %s) — retrying in %ds",
+                    attempt, max_retries, ticker, type(e).__name__, e, backoff,
+                )
+                time.sleep(backoff)
+            else:
+                logger.error(
+                    "yfinance fetch FAILED after %d attempts for %s: %s",
+                    max_retries, ticker, e,
+                )
+                raise
 
     # Flatten multi-level columns if present (yfinance sometimes returns them)
     if isinstance(df.columns, pd.MultiIndex):

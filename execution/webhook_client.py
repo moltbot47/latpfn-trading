@@ -6,6 +6,7 @@ which bridges signals to Tradovate on prop firm accounts where
 direct API access is unavailable.
 """
 
+import asyncio
 import json
 import logging
 import time
@@ -140,32 +141,54 @@ class WebhookClient:
 
     # ── HTTP helper ───────────────────────────────────────────────────
 
-    async def _send_webhook(self, payload: dict) -> Optional[str]:
-        """POST JSON payload to PickMyTrade webhook endpoint."""
+    async def _send_webhook(self, payload: dict, max_retries: int = 3) -> Optional[str]:
+        """POST JSON payload to PickMyTrade webhook endpoint with retry logic.
+
+        Retries up to max_retries times with exponential backoff (1s, 2s, 4s)
+        on aiohttp.ClientError and timeout errors.
+        """
         if self._session is None:
             logger.error("Webhook client not connected (call connect() first)")
             return None
 
-        try:
-            async with self._session.post(
-                self.webhook_url,
-                data=json.dumps(payload),
-                headers={"Content-Type": "text/plain"},
-                timeout=aiohttp.ClientTimeout(total=10),
-            ) as resp:
-                text = await resp.text()
-                if resp.status == 200:
-                    logger.debug("Webhook OK: %s", text[:200])
-                    return text
+        last_exception = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                async with self._session.post(
+                    self.webhook_url,
+                    data=json.dumps(payload),
+                    headers={"Content-Type": "text/plain"},
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as resp:
+                    text = await resp.text()
+                    logger.info(
+                        "Webhook response [attempt %d/%d] status=%d body=%s",
+                        attempt, max_retries, resp.status, text[:500],
+                    )
+                    if resp.status == 200:
+                        return text
+                    else:
+                        logger.error(
+                            "Webhook failed %d: %s  payload=%s",
+                            resp.status, text[:200], json.dumps(payload),
+                        )
+                        return None
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                last_exception = e
+                if attempt < max_retries:
+                    backoff = 2 ** (attempt - 1)  # 1s, 2s, 4s
+                    logger.warning(
+                        "Webhook attempt %d/%d failed (%s: %s) — retrying in %ds",
+                        attempt, max_retries, type(e).__name__, e, backoff,
+                    )
+                    await asyncio.sleep(backoff)
                 else:
                     logger.error(
-                        "Webhook failed %d: %s  payload=%s",
-                        resp.status, text[:200], json.dumps(payload),
+                        "Webhook FAILED after %d attempts. Last error: %s: %s  payload=%s",
+                        max_retries, type(e).__name__, e, json.dumps(payload),
                     )
-                    return None
-        except aiohttp.ClientError as e:
-            logger.error("Webhook HTTP error: %s", e)
-            return None
-        except Exception as e:
-            logger.error("Webhook unexpected error: %s", e)
-            return None
+            except Exception as e:
+                logger.error("Webhook unexpected error: %s", e)
+                return None
+
+        return None

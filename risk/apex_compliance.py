@@ -10,7 +10,9 @@ Enforces prop firm rules that go beyond standard risk management:
   6. Contract scaling — PA accounts start at 50% max contracts
 """
 
+import json
 import logging
+import os
 from datetime import datetime, time as dtime
 
 try:
@@ -58,6 +60,75 @@ class ApexCompliance:
         # Start-of-day profit balance for MAE rule
         self._sod_profit_balance: float = 0.0
 
+    # ── Drawdown state persistence ───────────────────────────────
+
+    DRAWDOWN_STATE_FILE = "data/drawdown_state.json"
+
+    def save_drawdown_state(self):
+        """Persist trailing drawdown state to disk so it survives restarts."""
+        try:
+            dir_name = os.path.dirname(self.DRAWDOWN_STATE_FILE)
+            if dir_name:
+                os.makedirs(dir_name, exist_ok=True)
+            state = {
+                "highest_balance": self._highest_balance,
+                "drawdown_floor": self._drawdown_floor,
+                "floor_locked": self._floor_locked,
+            }
+            tmp_path = self.DRAWDOWN_STATE_FILE + ".tmp"
+            with open(tmp_path, "w") as f:
+                json.dump(state, f, indent=2)
+            os.replace(tmp_path, self.DRAWDOWN_STATE_FILE)
+            logger.debug(
+                "Drawdown state saved: highest=$%.2f floor=$%.2f locked=%s",
+                self._highest_balance, self._drawdown_floor, self._floor_locked,
+            )
+        except Exception as e:
+            logger.error("Failed to save drawdown state: %s", e)
+
+    def load_drawdown_state(self):
+        """Load trailing drawdown state from disk. Call AFTER __init__ but BEFORE main loop."""
+        if not os.path.exists(self.DRAWDOWN_STATE_FILE):
+            logger.info("No drawdown state file found — using fresh defaults")
+            return
+
+        try:
+            with open(self.DRAWDOWN_STATE_FILE, "r") as f:
+                state = json.load(f)
+
+            highest = state.get("highest_balance")
+            floor = state.get("drawdown_floor")
+            locked = state.get("floor_locked")
+
+            # Validate types and values
+            if not isinstance(highest, (int, float)) or highest <= 0:
+                logger.warning("Invalid highest_balance in drawdown state: %s — ignoring", highest)
+                return
+            if not isinstance(floor, (int, float)):
+                logger.warning("Invalid drawdown_floor in drawdown state: %s — ignoring", floor)
+                return
+            if not isinstance(locked, bool):
+                logger.warning("Invalid floor_locked in drawdown state: %s — ignoring", locked)
+                return
+
+            # Sanity: floor should not be above highest balance
+            if floor > highest:
+                logger.warning(
+                    "Drawdown floor ($%.2f) > highest balance ($%.2f) — ignoring corrupt state",
+                    floor, highest,
+                )
+                return
+
+            self._highest_balance = highest
+            self._drawdown_floor = floor
+            self._floor_locked = locked
+            logger.info(
+                "Drawdown state restored: highest=$%.2f  floor=$%.2f  locked=%s",
+                self._highest_balance, self._drawdown_floor, self._floor_locked,
+            )
+        except Exception as e:
+            logger.error("Failed to load drawdown state: %s — using fresh defaults", e)
+
     def set_sod_profit_balance(self, profit_balance: float):
         """Set start-of-day profit balance (call at session start)."""
         self._sod_profit_balance = profit_balance
@@ -86,6 +157,9 @@ class ApexCompliance:
                     )
                 else:
                     self._drawdown_floor = new_floor
+
+        # Persist drawdown state after every balance update
+        self.save_drawdown_state()
 
         return self.get_drawdown_status(current_balance)
 

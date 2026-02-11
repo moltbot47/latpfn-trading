@@ -368,7 +368,8 @@ def generate_report(
 
 def main():
     parser = argparse.ArgumentParser(description="LaT-PFN Auto-Optimizer")
-    parser.add_argument("--instrument", type=str, default="MNQ", choices=["MYM", "MNQ", "MGC", "YM", "NQ", "GC"])
+    parser.add_argument("--instrument", type=str, default="MNQ",
+                        help="Instrument symbol (e.g. MNQ, MYM, MES, M2K, MCL, M6E, M6B, M6A, M6J)")
     parser.add_argument("--all", action="store_true", help="Run for all instruments")
     parser.add_argument("--days", type=int, default=30)
     parser.add_argument("--interval", type=str, default="5m")
@@ -377,6 +378,12 @@ def main():
     args = parser.parse_args()
 
     config = load_config(args.config)
+
+    if not args.all and args.instrument not in config["instruments"]:
+        valid = ", ".join(config["instruments"].keys())
+        print(f"Error: '{args.instrument}' not in config. Valid instruments: {valid}")
+        sys.exit(1)
+
     instruments = list(config["instruments"].keys()) if args.all else [args.instrument]
 
     # Load model once (shared across all backtests)

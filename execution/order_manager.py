@@ -5,6 +5,7 @@ Order lifecycle management: tracks active orders/positions and P&L.
 import json
 import logging
 import os
+import shutil
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -166,11 +167,20 @@ class OrderManager:
     # ---- Persistence ---------------------------------------------------
 
     def _save_state(self):
-        """Write all open positions to the JSON state file."""
+        """Write all open positions to the JSON state file (with backup)."""
         try:
             dir_name = os.path.dirname(self.state_file)
             if dir_name:
                 os.makedirs(dir_name, exist_ok=True)
+
+            # Create backup of current file before overwriting
+            if os.path.exists(self.state_file):
+                bak_path = self.state_file + ".bak"
+                try:
+                    shutil.copy2(self.state_file, bak_path)
+                except Exception as e:
+                    logger.warning("Failed to create position backup: %s", e)
+
             payload = [pos.to_dict() for pos in self.open_positions.values()]
             tmp_path = self.state_file + ".tmp"
             with open(tmp_path, "w") as f:
@@ -180,22 +190,73 @@ class OrderManager:
         except Exception as e:
             logger.error("Failed to save position state: %s", e)
 
+    # Required keys for a valid position entry
+    _REQUIRED_POSITION_KEYS = {"instrument", "direction", "entry_price", "size"}
+
     def load_state(self):
-        """Load open positions from the JSON state file (call on startup)."""
-        if not os.path.exists(self.state_file):
-            logger.info("No position state file found at %s — starting fresh", self.state_file)
+        """Load open positions from the JSON state file (call on startup).
+
+        Falls back to .bak file if primary file is corrupt/missing.
+        Validates each position dict has required keys before loading.
+        """
+        data = None
+        source = self.state_file
+
+        # Try primary file first
+        if os.path.exists(self.state_file):
+            try:
+                with open(self.state_file, "r") as f:
+                    data = json.load(f)
+            except Exception as e:
+                logger.error(
+                    "Failed to load position state from %s: %s — trying backup",
+                    self.state_file, e,
+                )
+
+        # Fall back to .bak if primary failed or doesn't exist
+        if data is None:
+            bak_path = self.state_file + ".bak"
+            if os.path.exists(bak_path):
+                try:
+                    with open(bak_path, "r") as f:
+                        data = json.load(f)
+                    source = bak_path
+                    logger.warning(
+                        "Loaded position state from BACKUP file %s", bak_path,
+                    )
+                except Exception as e:
+                    logger.error(
+                        "Failed to load position state from backup %s: %s", bak_path, e,
+                    )
+
+        if data is None:
+            logger.info("No position state file found — starting fresh")
             return
-        try:
-            with open(self.state_file, "r") as f:
-                data = json.load(f)
-            for item in data:
+
+        loaded = 0
+        skipped = 0
+        for item in data:
+            missing_keys = self._REQUIRED_POSITION_KEYS - set(item.keys())
+            if missing_keys:
+                logger.warning(
+                    "Skipping malformed position entry (missing keys: %s): %s",
+                    missing_keys, item,
+                )
+                skipped += 1
+                continue
+            try:
                 pos = Position.from_dict(item)
                 self.open_positions[pos.instrument] = pos
-            logger.info(
-                "Restored %d position(s) from %s", len(data), self.state_file
-            )
-        except Exception as e:
-            logger.error("Failed to load position state from %s: %s", self.state_file, e)
+                loaded += 1
+            except Exception as e:
+                logger.warning("Skipping position entry due to error: %s — data: %s", e, item)
+                skipped += 1
+
+        logger.info(
+            "Restored %d position(s) from %s%s",
+            loaded, source,
+            f" (skipped {skipped} malformed)" if skipped > 0 else "",
+        )
 
     # ---- Helpers -------------------------------------------------------
 
