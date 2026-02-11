@@ -134,12 +134,25 @@ class TradingBot(commands.Bot):
         positions: dict,
         account_equity: float,
         daily_pnl: float,
+        drawdown_status: dict | None = None,
     ):
-        """Post end-of-cycle summary."""
+        """Post end-of-cycle summary with drawdown tracking."""
         if not self._signal_channel:
             return
-        embed = cycle_summary_embed(cycle, predictions, positions, account_equity, daily_pnl)
-        await self._signal_channel.send(embed=embed)
+        embed = cycle_summary_embed(
+            cycle, predictions, positions, account_equity, daily_pnl, drawdown_status
+        )
+        # Alert if cushion is dangerously low (<20%)
+        content = None
+        if drawdown_status and drawdown_status["at_risk"]:
+            mention = f"<@&{self.alert_role_id}>" if self.alert_role_id else "@here"
+            content = (
+                f"{mention} **DRAWDOWN WARNING** — "
+                f"Cushion: ${drawdown_status['cushion']:,.2f} "
+                f"({drawdown_status['cushion_pct']:.0f}%) "
+                f"Floor: ${drawdown_status['drawdown_floor']:,.2f}"
+            )
+        await self._signal_channel.send(content=content, embed=embed)
 
 
 # ── Global bot instance (set by run_bot) ──────────────────────────

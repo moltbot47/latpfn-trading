@@ -89,8 +89,10 @@ risk:
   trailing_stop_distance_pct: 1.0
 
   prop_firm:
-    max_daily_loss_usd: 1000     # Adjust to your prop firm rules
-    max_total_drawdown_usd: 2500 # $50k account trailing drawdown
+    starting_balance: 50000      # Account starting balance
+    max_daily_loss_usd: 1000     # Conservative daily loss limit
+    max_total_drawdown_usd: 2500 # $50k account trailing drawdown ($50k - $2.5k = $47.5k floor)
+    profit_target_usd: 3000      # Profit target to pass eval ($50k + $3k = $53k)
     flatten_eod: true
     flatten_time: "16:55"        # Hard flatten at 4:55 PM ET (4min before 4:59 deadline)
     no_new_trades_after: "16:45" # Stop opening positions after 4:45 PM ET

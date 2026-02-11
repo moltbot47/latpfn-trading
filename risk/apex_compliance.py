@@ -38,6 +38,17 @@ class ApexCompliance:
         self.risk_cfg = config.get("risk", {})
         self.apex_cfg = config.get("risk", {}).get("prop_firm", {})
 
+        # Account parameters
+        self.starting_balance = self.apex_cfg.get("starting_balance", 50000)
+        self.trailing_drawdown_amount = self.apex_cfg.get("max_total_drawdown_usd", 2500)
+        self.profit_target = self.apex_cfg.get("profit_target_usd", 3000)
+        self.profit_target_balance = self.starting_balance + self.profit_target
+
+        # Trailing drawdown state
+        self._highest_balance: float = self.starting_balance
+        self._drawdown_floor: float = self.starting_balance - self.trailing_drawdown_amount
+        self._floor_locked: bool = False  # Stops trailing once floor reaches profit target balance
+
         # Daily P&L tracking for consistency rule
         self._daily_pnl: dict[str, float] = {}  # date_str → P&L
         self._total_pnl: float = 0.0
@@ -49,6 +60,49 @@ class ApexCompliance:
         """Set start-of-day profit balance (call at session start)."""
         self._sod_profit_balance = profit_balance
         logger.info("SOD profit balance set: $%.2f", profit_balance)
+
+    def update_balance(self, current_balance: float):
+        """
+        Update trailing drawdown based on current balance (including unrealized P&L).
+
+        Call this every cycle with the latest account balance.
+        The drawdown floor trails the highest balance seen, minus $2,500.
+        Once the floor reaches the profit target balance ($53,000), it locks.
+        """
+        if current_balance > self._highest_balance:
+            self._highest_balance = current_balance
+
+            if not self._floor_locked:
+                new_floor = self._highest_balance - self.trailing_drawdown_amount
+                # Lock the floor once it reaches the profit target balance
+                if new_floor >= self.profit_target_balance:
+                    self._drawdown_floor = self.profit_target_balance
+                    self._floor_locked = True
+                    logger.info(
+                        "DRAWDOWN FLOOR LOCKED at $%,.2f (profit target reached)",
+                        self._drawdown_floor,
+                    )
+                else:
+                    self._drawdown_floor = new_floor
+
+        return self.get_drawdown_status(current_balance)
+
+    def get_drawdown_status(self, current_balance: float) -> dict:
+        """Return current drawdown status for display/alerting."""
+        cushion = current_balance - self._drawdown_floor
+        cushion_pct = (cushion / self.trailing_drawdown_amount) * 100 if self.trailing_drawdown_amount > 0 else 100
+        profit_to_target = self.profit_target_balance - current_balance
+        return {
+            "current_balance": current_balance,
+            "highest_balance": self._highest_balance,
+            "drawdown_floor": self._drawdown_floor,
+            "floor_locked": self._floor_locked,
+            "cushion": cushion,
+            "cushion_pct": cushion_pct,
+            "at_risk": cushion < self.trailing_drawdown_amount * 0.20,  # <20% cushion
+            "profit_to_target": profit_to_target,
+            "profit_target_balance": self.profit_target_balance,
+        }
 
     def record_daily_pnl(self, date_str: str, pnl: float):
         """Record a day's P&L for consistency tracking."""

@@ -94,6 +94,7 @@ def cycle_summary_embed(
     positions: dict,
     account_equity: float,
     daily_pnl: float,
+    drawdown_status: dict | None = None,
 ) -> discord.Embed:
     """Build embed for end-of-cycle summary."""
     pnl_emoji = "\U0001F7E2" if daily_pnl >= 0 else "\U0001F534"
@@ -127,6 +128,21 @@ def cycle_summary_embed(
     embed.add_field(name="Equity", value=f"${account_equity:,.2f}", inline=True)
     embed.add_field(name="Daily P&L", value=f"{pnl_emoji} ${daily_pnl:+,.2f}", inline=True)
     embed.add_field(name="Open Positions", value=str(len(positions)), inline=True)
+
+    # Drawdown status
+    if drawdown_status:
+        dd = drawdown_status
+        lock_label = " (LOCKED)" if dd["floor_locked"] else ""
+        cushion_bar_len = 10
+        cushion_filled = min(int(dd["cushion_pct"] / 10), cushion_bar_len)
+        cushion_bar = "\U0001F7E9" * cushion_filled + "\U0001F7E5" * (cushion_bar_len - cushion_filled)
+        dd_text = (
+            f"Floor: **${dd['drawdown_floor']:,.2f}**{lock_label}\n"
+            f"Cushion: ${dd['cushion']:,.2f} ({dd['cushion_pct']:.0f}%)\n"
+            f"{cushion_bar}\n"
+            f"To target (${ dd['profit_target_balance']:,.0f}): **${dd['profit_to_target']:,.2f}**"
+        )
+        embed.add_field(name="Trailing Drawdown", value=dd_text, inline=False)
 
     embed.set_footer(text="LaT-PFN Trading System")
     return embed

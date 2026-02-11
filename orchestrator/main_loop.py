@@ -169,6 +169,14 @@ class TradingSystem:
                     logger.error("Error processing %s: %s", instrument, e, exc_info=True)
                     predictions[instrument] = None
 
+            # Update trailing drawdown tracking
+            dd_status = self.apex.update_balance(self.account_equity)
+            if dd_status["at_risk"]:
+                logger.warning(
+                    "DRAWDOWN WARNING: cushion $%.2f (%.0f%%) — floor $%,.2f",
+                    dd_status["cushion"], dd_status["cushion_pct"], dd_status["drawdown_floor"],
+                )
+
             # Dashboard update
             dashboard.print_cycle_summary(
                 cycle=self.cycle,
@@ -178,7 +186,7 @@ class TradingSystem:
                 daily_pnl=self.order_mgr.realized_pnl_today,
             )
 
-            # Discord cycle summary
+            # Discord cycle summary (with drawdown status)
             if self.discord_bot:
                 try:
                     await self.discord_bot.post_cycle_summary(
@@ -187,6 +195,7 @@ class TradingSystem:
                         positions=self.order_mgr.open_positions,
                         account_equity=self.account_equity,
                         daily_pnl=self.order_mgr.realized_pnl_today,
+                        drawdown_status=dd_status,
                     )
                 except Exception:
                     pass
