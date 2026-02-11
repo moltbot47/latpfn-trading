@@ -91,9 +91,16 @@ class OrderManager:
         instrument: str,
         exit_price: float,
         contract_size: float,
+        exit_reason: str = "manual",
     ) -> float:
         """
         Close a position and record P&L.
+
+        Args:
+            exit_reason: How the position was closed. Values:
+                'manual'      — closed via Discord /close command or flatten
+                'inferred_sl' — stop loss inferred from price data (estimated)
+                'inferred_tp' — take profit inferred from price data (estimated)
 
         Returns realized P&L in dollars.
         """
@@ -122,7 +129,7 @@ class OrderManager:
             self.trade_logger.update_trade_exit(
                 trade_id=pos.trade_log_id,
                 exit_price=exit_price,
-                exit_reason="manual",
+                exit_reason=exit_reason,
                 pnl_dollars=pnl_dollars,
                 time_in_trade_minutes=duration,
             )

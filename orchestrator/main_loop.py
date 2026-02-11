@@ -33,6 +33,7 @@ from execution.order_manager import OrderManager, Position
 from monitoring import dashboard
 from monitoring.logger import setup_logging
 from monitoring.trade_logger import TradeLogger
+from monitoring.position_monitor import check_position_exits
 
 logger = logging.getLogger(__name__)
 
@@ -203,6 +204,40 @@ class TradingSystem:
                 except Exception as e:
                     logger.error("Error processing %s: %s", instrument, e, exc_info=True)
                     predictions[instrument] = None
+
+            # Check open positions for inferred exits (price-based estimation)
+            # NOTE: Only monitors executed positions — see position_monitor.py
+            # for full accuracy disclaimers. Results are estimates, not confirmed fills.
+            if self.order_mgr.open_count > 0:
+                try:
+                    inferred_exits = check_position_exits(
+                        open_positions=self.order_mgr.open_positions,
+                        instruments_config=self.config["instruments"],
+                    )
+                    for ex in inferred_exits:
+                        inst = ex["instrument"]
+                        pnl = self.order_mgr.close_position(
+                            instrument=inst,
+                            exit_price=ex["exit_price"],
+                            contract_size=ex["contract_size"],
+                            exit_reason=ex["exit_reason"],
+                        )
+                        # Update drawdown tracker with estimated P&L
+                        self.apex.update_balance(self.account_equity + pnl)
+
+                        # Discord notification
+                        if self.discord_bot:
+                            try:
+                                await self.discord_bot._signal_channel.send(
+                                    f"**{ex['exit_reason'].upper()}** {inst} "
+                                    f"@ {ex['exit_price']:.2f}  |  "
+                                    f"Est. P&L: ${pnl:+.2f}\n"
+                                    f"*{ex['note']}*"
+                                )
+                            except Exception:
+                                pass
+                except Exception as e:
+                    logger.error("Position exit check failed: %s", e)
 
             # Dashboard update
             dashboard.print_cycle_summary(
