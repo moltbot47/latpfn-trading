@@ -28,6 +28,8 @@ CORRELATED_GROUPS = [
 ET = ZoneInfo("America/New_York")
 FLATTEN_TIME = dtime(16, 55)  # 4:55 PM ET — hard cutoff
 NO_NEW_TRADES_TIME = dtime(16, 45)  # 4:45 PM ET — stop opening new positions
+MARKET_CLOSE = dtime(17, 0)  # 5:00 PM ET — market close (session break starts)
+MARKET_REOPEN = dtime(18, 0)  # 6:00 PM ET — next session opens
 
 
 class ApexCompliance:
@@ -151,10 +153,11 @@ class ApexCompliance:
         return True, "Apex compliant"
 
     def _check_trading_time(self) -> tuple[bool, str]:
-        """Block new trades after 4:45 PM ET."""
+        """Block new trades after 4:45 PM ET (only during close window, not evening session)."""
         now = datetime.now(ET)
         t = now.time()
-        if t >= NO_NEW_TRADES_TIME:
+        # Only block during the 4:45-5:00 PM close window, not the evening session
+        if NO_NEW_TRADES_TIME <= t < MARKET_REOPEN:
             return False, f"No new trades after 4:45 PM ET (now: {t.strftime('%H:%M')} ET) — must flatten by 4:59"
         return True, ""
 
@@ -247,10 +250,14 @@ class ApexCompliance:
     # ── Time-based guards ────────────────────────────────────────
 
     def should_flatten_now(self) -> bool:
-        """Check if we've hit the hard flatten time (4:55 PM ET)."""
+        """Check if we've hit the hard flatten time (4:55 PM ET).
+
+        Only triggers during the close window (4:55-5:00 PM), not during
+        the evening session that reopens at 6:00 PM ET.
+        """
         now = datetime.now(ET)
         t = now.time()
-        return t >= FLATTEN_TIME
+        return FLATTEN_TIME <= t < MARKET_REOPEN
 
     # ── Consistency rule helpers ─────────────────────────────────
 
