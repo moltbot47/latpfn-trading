@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LaT-PFN Trading Dashboard</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --border: #30363d;
+    --text: #c9d1d9; --muted: #8b949e; --accent: #58a6ff;
+    --green: #3fb950; --red: #f85149; --yellow: #d29922;
+    --purple: #bc8cff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, 'SF Mono', 'Fira Code', monospace; font-size: 13px; }
+  .header { background: var(--card); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; }
+  .header h1 { font-size: 16px; color: var(--accent); font-weight: 600; }
+  .header .status { display: flex; align-items: center; gap: 12px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot.alive { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot.dead { background: var(--red); box-shadow: 0 0 6px var(--red); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; padding: 12px 24px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .card h2 { font-size: 12px; text-transform: uppercase; color: var(--muted); letter-spacing: 1px; margin-bottom: 12px; }
+  .metric { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid var(--border); }
+  .metric:last-child { border-bottom: none; }
+  .metric .label { color: var(--muted); }
+  .metric .value { font-weight: 600; }
+  .positive { color: var(--green); }
+  .negative { color: var(--red); }
+  .warning { color: var(--yellow); }
+  .neutral { color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; color: var(--muted); font-weight: 500; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  tr:hover { background: rgba(88,166,255,0.05); }
+  .badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .badge.long { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge.short { background: rgba(248,81,73,0.15); color: var(--red); }
+  .badge.stale { background: rgba(210,153,34,0.15); color: var(--yellow); }
+  .wide { grid-column: 1 / -1; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .progress-bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 4px; }
+  .progress-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+  .equity-chart { width: 100%; height: 120px; }
+  canvas { width: 100% !important; height: 120px !important; }
+  .footer { text-align: center; padding: 8px; color: var(--muted); font-size: 11px; }
+  @media (max-width: 768px) { .grid { grid-template-columns: 1fr; padding: 8px; } .two-col { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>LaT-PFN Trading Dashboard</h1>
+  <div class="status">
+    <span id="cycle-info" class="muted">Loading...</span>
+    <span class="dot" id="status-dot"></span>
+    <span id="last-update" style="color:var(--muted);font-size:11px;"></span>
+  </div>
+</div>
+
+<div class="grid">
+
+  <!-- Account Overview -->
+  <div class="card">
+    <h2>Account Overview</h2>
+    <div class="metric"><span class="label">Estimated Equity</span><span class="value" id="equity">--</span></div>
+    <div class="metric"><span class="label">Daily P&L</span><span class="value" id="daily-pnl">--</span></div>
+    <div class="metric"><span class="label">Unrealized P&L</span><span class="value" id="unrealized-pnl">--</span></div>
+    <div class="metric"><span class="label">Drawdown Floor</span><span class="value" id="dd-floor">--</span></div>
+    <div class="metric"><span class="label">Cushion</span><span class="value" id="cushion">--</span></div>
+    <div class="metric"><span class="label">High Water Mark</span><span class="value" id="hwm">--</span></div>
+    <div class="metric"><span class="label">Floor Locked</span><span class="value" id="floor-locked">--</span></div>
+  </div>
+
+  <!-- Performance Summary -->
+  <div class="card">
+    <h2>Performance Summary</h2>
+    <div class="metric"><span class="label">Total Trades</span><span class="value" id="total-trades">--</span></div>
+    <div class="metric"><span class="label">Win Rate</span><span class="value" id="win-rate">--</span></div>
+    <div class="metric"><span class="label">Total P&L</span><span class="value" id="total-pnl">--</span></div>
+    <div class="metric"><span class="label">Profit Factor</span><span class="value" id="profit-factor">--</span></div>
+    <div class="metric"><span class="label">Avg Win / Avg Loss</span><span class="value" id="avg-win-loss">--</span></div>
+    <div class="metric"><span class="label">Max Drawdown</span><span class="value" id="max-dd">--</span></div>
+    <div class="metric"><span class="label">Long / Short P&L</span><span class="value" id="dir-pnl">--</span></div>
+  </div>
+
+  <!-- Prediction Accuracy -->
+  <div class="card">
+    <h2>Prediction Accuracy</h2>
+    <div class="metric"><span class="label">Overall Accuracy</span><span class="value" id="pred-accuracy">--</span></div>
+    <div class="metric"><span class="label">Evaluated / Total</span><span class="value" id="pred-count">--</span></div>
+    <div id="pred-instruments"></div>
+    <div id="pred-confidence" style="margin-top:8px;"></div>
+  </div>
+
+  <!-- Open Positions -->
+  <div class="card wide">
+    <h2>Open Positions (<span id="pos-count">0</span>)</h2>
+    <table>
+      <thead><tr><th>Instrument</th><th>Direction</th><th>Size</th><th>Entry</th><th>Current</th><th>Unrealized</th><th>TP Progress</th><th>Time Held</th><th>SL</th><th>TP</th></tr></thead>
+      <tbody id="positions-body"><tr><td colspan="10" style="text-align:center;color:var(--muted)">Loading...</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- Per-Tier Breakdown -->
+  <div class="card">
+    <h2>Shot Tier Performance</h2>
+    <table>
+      <thead><tr><th>Tier</th><th>Trades</th><th>WR%</th><th>P&L</th><th>PF</th></tr></thead>
+      <tbody id="tier-body"><tr><td colspan="5" style="color:var(--muted)">Loading...</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- Exit Reasons -->
+  <div class="card">
+    <h2>Exit Reasons</h2>
+    <div id="exit-reasons"></div>
+  </div>
+
+  <!-- Equity Curve -->
+  <div class="card wide">
+    <h2>Equity Curve</h2>
+    <canvas id="equity-canvas"></canvas>
+  </div>
+
+  <!-- Recent Trades -->
+  <div class="card wide">
+    <h2>Recent Trades</h2>
+    <table>
+      <thead><tr><th>Time</th><th>Instrument</th><th>Dir</th><th>Tier</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Reason</th><th>Duration</th></tr></thead>
+      <tbody id="trades-body"><tr><td colspan="9" style="color:var(--muted)">Loading...</td></tr></tbody>
+    </table>
+  </div>
+
+</div>
+
+<div class="footer">Auto-refreshes every 15s | LaT-PFN Automated Futures Trading</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const pnlClass = v => v > 0 ? 'positive' : v < 0 ? 'negative' : 'neutral';
+const fmt = v => v >= 0 ? `$${v.toLocaleString('en-US', {minimumFractionDigits:2})}` : `-$${Math.abs(v).toLocaleString('en-US', {minimumFractionDigits:2})}`;
+
+async function fetchJSON(url) {
+  try { const r = await fetch(url); return await r.json(); } catch { return null; }
+}
+
+async function refreshStatus() {
+  const d = await fetchJSON('/api/status');
+  if (!d) return;
+  const dot = $('status-dot');
+  dot.className = d.alive ? 'dot alive' : 'dot dead';
+  $('cycle-info').textContent = d.alive
+    ? `Cycle ${d.cycle || '?'} | ${d.instruments || '?'} instruments`
+    : 'OFFLINE';
+  $('last-update').textContent = d.age_seconds >= 0
+    ? `${Math.round(d.age_seconds)}s ago`
+    : 'No heartbeat';
+}
+
+async function refreshAccount() {
+  const d = await fetchJSON('/api/account');
+  if (!d) return;
+  $('equity').textContent = fmt(d.estimated_equity);
+  $('equity').className = 'value';
+  $('daily-pnl').textContent = fmt(d.daily_pnl);
+  $('daily-pnl').className = 'value ' + pnlClass(d.daily_pnl);
+  $('unrealized-pnl').textContent = fmt(d.unrealized_pnl);
+  $('unrealized-pnl').className = 'value ' + pnlClass(d.unrealized_pnl);
+  $('dd-floor').textContent = fmt(d.drawdown_floor);
+  $('cushion').textContent = fmt(d.cushion);
+  $('cushion').className = 'value ' + (d.cushion < 500 ? 'negative' : d.cushion < 1000 ? 'warning' : 'positive');
+  $('hwm').textContent = fmt(d.highest_balance);
+  $('floor-locked').textContent = d.floor_locked ? 'YES' : 'No';
+  $('floor-locked').className = 'value ' + (d.floor_locked ? 'positive' : 'neutral');
+}
+
+async function refreshPositions() {
+  const d = await fetchJSON('/api/positions');
+  if (!d || !Array.isArray(d)) return;
+  $('pos-count').textContent = d.length;
+  if (d.length === 0) {
+    $('positions-body').innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted)">No open positions</td></tr>';
+    return;
+  }
+  $('positions-body').innerHTML = d.map(p => {
+    const held = p.held_minutes > 60 ? `${(p.held_minutes/60).toFixed(1)}h` : `${Math.round(p.held_minutes)}m`;
+    const tpPct = Math.min(Math.max(p.tp_progress_pct, -100), 100);
+    const barColor = tpPct >= 75 ? 'var(--green)' : tpPct >= 0 ? 'var(--accent)' : 'var(--red)';
+    return `<tr>
+      <td><strong>${p.instrument}</strong><br><span style="color:var(--muted);font-size:11px">${p.name}</span></td>
+      <td><span class="badge ${p.direction}">${p.direction.toUpperCase()}</span>${p.stale ? ' <span class="badge stale">STALE</span>' : ''}</td>
+      <td>${p.size}</td>
+      <td>${p.entry_price.toFixed(2)}</td>
+      <td>${p.current_price ? p.current_price.toFixed(2) : '--'}</td>
+      <td class="${pnlClass(p.unrealized_pnl)}">${fmt(p.unrealized_pnl)}</td>
+      <td>${tpPct.toFixed(0)}%<div class="progress-bar"><div class="progress-fill" style="width:${Math.abs(tpPct)}%;background:${barColor}"></div></div></td>
+      <td>${held}</td>
+      <td>${p.stop_loss.toFixed(2)}</td>
+      <td>${p.take_profit.toFixed(2)}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function refreshPerformance() {
+  const d = await fetchJSON('/api/performance');
+  if (!d || d.error || !d.total_trades) return;
+  $('total-trades').textContent = d.total_trades;
+  $('win-rate').textContent = `${d.win_rate}%`;
+  $('win-rate').className = 'value ' + (d.win_rate >= 60 ? 'positive' : d.win_rate >= 50 ? 'warning' : 'negative');
+  $('total-pnl').textContent = fmt(d.total_pnl);
+  $('total-pnl').className = 'value ' + pnlClass(d.total_pnl);
+  $('profit-factor').textContent = d.profit_factor >= 99 ? 'Inf' : d.profit_factor.toFixed(2);
+  $('profit-factor').className = 'value ' + (d.profit_factor >= 2 ? 'positive' : d.profit_factor >= 1 ? 'warning' : 'negative');
+  $('avg-win-loss').textContent = `${fmt(d.avg_win)} / ${fmt(d.avg_loss)}`;
+  $('max-dd').textContent = fmt(d.max_drawdown);
+  $('max-dd').className = 'value negative';
+  $('dir-pnl').innerHTML = `<span class="${pnlClass(d.long_pnl)}">${fmt(d.long_pnl)} (${d.long_count}L)</span> / <span class="${pnlClass(d.short_pnl)}">${fmt(d.short_pnl)} (${d.short_count}S)</span>`;
+
+  // Tier table
+  const tiers = ['layup','short_range','free_throw','three_pointer','half_court','hail_mary'];
+  let tierHtml = '';
+  for (const t of tiers) {
+    const s = d.per_tier[t];
+    if (!s) continue;
+    tierHtml += `<tr>
+      <td>${t}</td><td>${s.count}</td>
+      <td class="${s.win_rate >= 60 ? 'positive' : s.win_rate >= 50 ? 'warning' : 'negative'}">${s.win_rate}%</td>
+      <td class="${pnlClass(s.total_pnl)}">${fmt(s.total_pnl)}</td>
+      <td>${s.profit_factor >= 99 ? 'Inf' : s.profit_factor.toFixed(1)}</td>
+    </tr>`;
+  }
+  $('tier-body').innerHTML = tierHtml || '<tr><td colspan="5" style="color:var(--muted)">No data</td></tr>';
+
+  // Exit reasons
+  let exitHtml = '';
+  for (const [reason, count] of Object.entries(d.exit_reasons || {})) {
+    const icon = reason === 'take_profit' ? 'positive' : reason === 'stop_loss' ? 'negative' : 'warning';
+    exitHtml += `<div class="metric"><span class="label">${reason}</span><span class="value ${icon}">${count}</span></div>`;
+  }
+  $('exit-reasons').innerHTML = exitHtml || '<div class="metric"><span class="label">No exits yet</span></div>';
+
+  // Equity curve
+  drawEquityCurve(d.equity_curve || []);
+}
+
+function drawEquityCurve(data) {
+  const canvas = $('equity-canvas');
+  if (!data.length || !canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+
+  const min = Math.min(0, ...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const pad = 4;
+
+  // Zero line
+  const zeroY = h - pad - ((0 - min) / range) * (h - pad * 2);
+  ctx.strokeStyle = 'rgba(139,148,158,0.3)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(0, zeroY);
+  ctx.lineTo(w, zeroY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Curve
+  ctx.strokeStyle = data[data.length - 1] >= 0 ? '#3fb950' : '#f85149';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = (i / (data.length - 1)) * w;
+    const y = h - pad - ((v - min) / range) * (h - pad * 2);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // Fill
+  ctx.lineTo(w, h);
+  ctx.lineTo(0, h);
+  ctx.closePath();
+  ctx.fillStyle = data[data.length - 1] >= 0 ? 'rgba(63,185,80,0.1)' : 'rgba(248,81,73,0.1)';
+  ctx.fill();
+
+  // Labels
+  ctx.fillStyle = 'var(--muted)';
+  ctx.font = '10px monospace';
+  ctx.fillText(`$${max.toFixed(0)}`, 4, 12);
+  ctx.fillText(`$${data[data.length-1].toFixed(0)}`, w - 50, h - pad - ((data[data.length-1] - min) / range) * (h - pad*2) - 4);
+}
+
+async function refreshPredictions() {
+  const d = await fetchJSON('/api/predictions');
+  if (!d || d.error) return;
+  $('pred-accuracy').textContent = `${d.overall_accuracy}%`;
+  $('pred-accuracy').className = 'value ' + (d.overall_accuracy >= 55 ? 'positive' : d.overall_accuracy >= 50 ? 'warning' : 'negative');
+  $('pred-count').textContent = `${d.evaluated} / ${d.total_predictions}`;
+
+  // Per-instrument
+  let instHtml = '';
+  for (const [inst, s] of Object.entries(d.by_instrument || {})) {
+    instHtml += `<div class="metric"><span class="label">${inst} (n=${s.evaluated})</span><span class="value ${s.accuracy >= 55 ? 'positive' : s.accuracy >= 50 ? 'warning' : 'negative'}">${s.accuracy}%</span></div>`;
+  }
+  $('pred-instruments').innerHTML = instHtml;
+
+  // Confidence bins
+  let confHtml = '<div style="margin-top:4px;font-size:11px;color:var(--muted)">By confidence:</div>';
+  for (const [bin, s] of Object.entries(d.by_confidence || {})) {
+    confHtml += `<div class="metric"><span class="label">${bin} (n=${s.total})</span><span class="value ${s.accuracy >= 55 ? 'positive' : s.accuracy >= 50 ? 'warning' : 'negative'}">${s.accuracy}%</span></div>`;
+  }
+  $('pred-confidence').innerHTML = confHtml;
+}
+
+async function refreshTrades() {
+  const d = await fetchJSON('/api/trades/recent');
+  if (!d || !Array.isArray(d) || d.length === 0) {
+    $('trades-body').innerHTML = '<tr><td colspan="9" style="color:var(--muted)">No trades</td></tr>';
+    return;
+  }
+  $('trades-body').innerHTML = d.map(t => {
+    const pnl = t.pnl_dollars || 0;
+    const dur = t.time_in_trade_minutes ? `${t.time_in_trade_minutes.toFixed(0)}m` : '--';
+    const ts = t.timestamp ? t.timestamp.substring(5, 16) : '--';
+    return `<tr>
+      <td>${ts}</td>
+      <td>${t.instrument}</td>
+      <td><span class="badge ${t.direction}">${(t.direction||'').toUpperCase()}</span></td>
+      <td>${t.shot_tier || '--'}</td>
+      <td>${t.entry_price ? t.entry_price.toFixed(2) : '--'}</td>
+      <td>${t.exit_price ? t.exit_price.toFixed(2) : '--'}</td>
+      <td class="${pnlClass(pnl)}">${pnl ? fmt(pnl) : '--'}</td>
+      <td>${t.exit_reason || (t.execution_status === 'executed' ? 'open' : t.execution_status)}</td>
+      <td>${dur}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function refreshAll() {
+  await Promise.all([
+    refreshStatus(),
+    refreshAccount(),
+    refreshPositions(),
+    refreshPerformance(),
+    refreshPredictions(),
+    refreshTrades(),
+  ]);
+}
+
+refreshAll();
+setInterval(refreshAll, 15000);
+</script>
+</body>
+</html>

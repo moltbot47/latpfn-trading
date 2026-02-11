@@ -4,6 +4,7 @@ normalizes, and formats data for the LaT-PFN model.
 """
 
 import logging
+import threading
 import time
 from typing import Dict
 
@@ -17,6 +18,84 @@ logger = logging.getLogger(__name__)
 
 # Cache entries older than this (seconds) are refetched
 _CACHE_TTL_SECONDS = 270  # 4.5 minutes (just under 5-min prediction cycle)
+
+
+# ── Global yfinance rate limiter (token bucket: max 2 calls/sec) ───────
+
+class _YFinanceRateLimiter:
+    """Token-bucket rate limiter with circuit breaker for yfinance calls.
+
+    - Max 2 calls per second (token bucket).
+    - Circuit breaker: after 5 consecutive failures, pause 30 seconds.
+    """
+
+    def __init__(self, max_calls_per_second: float = 2.0, failure_threshold: int = 5,
+                 circuit_pause_seconds: float = 30.0):
+        self._min_interval = 1.0 / max_calls_per_second
+        self._last_call_time = 0.0
+        self._lock = threading.Lock()
+
+        # Circuit breaker state
+        self._consecutive_failures = 0
+        self._failure_threshold = failure_threshold
+        self._circuit_pause_seconds = circuit_pause_seconds
+        self._circuit_open_until = 0.0
+
+    def wait(self):
+        """Block until a call is allowed by the rate limiter and circuit breaker."""
+        with self._lock:
+            now = time.monotonic()
+
+            # Circuit breaker: if open, wait until it closes
+            if now < self._circuit_open_until:
+                wait_time = self._circuit_open_until - now
+                logger.warning(
+                    "yfinance circuit breaker open — waiting %.1fs before retry",
+                    wait_time,
+                )
+                time.sleep(wait_time)
+                now = time.monotonic()
+
+            # Token bucket: enforce minimum interval between calls
+            elapsed = now - self._last_call_time
+            if elapsed < self._min_interval:
+                time.sleep(self._min_interval - elapsed)
+
+            self._last_call_time = time.monotonic()
+
+    def record_success(self):
+        """Record a successful yfinance call — reset failure counter."""
+        with self._lock:
+            self._consecutive_failures = 0
+
+    def record_failure(self):
+        """Record a failed yfinance call — trip circuit breaker if threshold reached."""
+        with self._lock:
+            self._consecutive_failures += 1
+            if self._consecutive_failures >= self._failure_threshold:
+                self._circuit_open_until = time.monotonic() + self._circuit_pause_seconds
+                logger.error(
+                    "yfinance circuit breaker TRIPPED after %d consecutive failures — "
+                    "pausing for %.0fs",
+                    self._consecutive_failures, self._circuit_pause_seconds,
+                )
+                self._consecutive_failures = 0  # reset after tripping
+
+
+# Module-level singleton
+_rate_limiter = _YFinanceRateLimiter()
+
+
+def _rate_limited_fetch(symbol: str, bars: int, interval: str) -> pd.DataFrame:
+    """Fetch OHLCV data with rate limiting and circuit breaker protection."""
+    _rate_limiter.wait()
+    try:
+        df = fetch_ohlcv(symbol, bars=bars, interval=interval)
+        _rate_limiter.record_success()
+        return df
+    except Exception:
+        _rate_limiter.record_failure()
+        raise
 
 
 class DataPipeline:
@@ -47,8 +126,8 @@ class DataPipeline:
 
         inst_cfg = self.config["instruments"][instrument]
 
-        # Fetch target instrument
-        heldout_df = fetch_ohlcv(instrument, bars=total_bars, interval=interval)
+        # Fetch target instrument (rate-limited)
+        heldout_df = _rate_limited_fetch(instrument, bars=total_bars, interval=interval)
 
         # Fetch context assets
         context_dfs = {}
@@ -85,7 +164,7 @@ class DataPipeline:
             if age < _CACHE_TTL_SECONDS and len(cached_df) >= bars:
                 return cached_df
 
-        df = fetch_ohlcv(symbol, bars=bars, interval=interval)
+        df = _rate_limited_fetch(symbol, bars=bars, interval=interval)
         self._cache[key] = (df, now)
         return df
 

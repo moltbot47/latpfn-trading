@@ -108,6 +108,9 @@ class TradingSystem:
         # Restore any persisted positions from a previous run
         self.order_mgr.load_state()
 
+        # Restore system state (cycle number) from a previous run
+        self._restore_system_state()
+
         # Restore drawdown floor from previous run (BEFORE main loop, AFTER ApexCompliance init)
         self.apex.load_drawdown_state()
 
@@ -452,6 +455,9 @@ class TradingSystem:
             # Heartbeat at end of cycle
             self._write_heartbeat("cycle_end")
 
+            # Check for stale positions (open > 24 hours)
+            await self._check_stale_positions()
+
             # Wait for next cycle
             logger.info("Next cycle in %d minutes", self.interval)
             await asyncio.sleep(self.interval * 60)
@@ -737,6 +743,77 @@ class TradingSystem:
                 trade_log_id=trade_log_id,
             ))
 
+    def _save_system_state(self):
+        """Persist system state to data/system_state.json for crash recovery."""
+        state_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "data", "system_state.json",
+        )
+        try:
+            os.makedirs(os.path.dirname(state_path), exist_ok=True)
+            payload = {
+                "cycle": self.cycle,
+                "daily_pnl": self.order_mgr.realized_pnl_today,
+                "current_trading_date": str(self._current_trading_date) if self._current_trading_date else None,
+                "timestamp": datetime.now().isoformat(timespec="seconds"),
+            }
+            tmp_path = state_path + ".tmp"
+            with open(tmp_path, "w") as f:
+                json.dump(payload, f, indent=2)
+            os.replace(tmp_path, state_path)
+            logger.info("System state saved: cycle=%d, daily_pnl=%.2f", self.cycle, self.order_mgr.realized_pnl_today)
+        except Exception as e:
+            logger.warning("Failed to save system state: %s", e)
+
+    def _restore_system_state(self):
+        """Restore cycle number from data/system_state.json if it exists."""
+        state_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "data", "system_state.json",
+        )
+        if not os.path.exists(state_path):
+            logger.info("No system_state.json found — starting from cycle 0")
+            return
+        try:
+            with open(state_path, "r") as f:
+                data = json.load(f)
+            restored_cycle = data.get("cycle", 0)
+            self.cycle = restored_cycle
+            logger.info(
+                "Restored system state: cycle=%d (saved at %s)",
+                restored_cycle, data.get("timestamp", "unknown"),
+            )
+        except Exception as e:
+            logger.warning("Failed to restore system state: %s", e)
+
+    async def _check_stale_positions(self):
+        """Warn about positions that have been open for more than 24 hours."""
+        now = datetime.now()
+        stale_threshold_hours = 24
+        for inst, pos in self.order_mgr.open_positions.items():
+            entry_time = getattr(pos, "entry_time", None)
+            if entry_time is None:
+                continue
+            age_hours = (now - entry_time).total_seconds() / 3600.0
+            if age_hours > stale_threshold_hours:
+                logger.warning(
+                    "STALE POSITION: %s has been open %.1f hours (since %s)",
+                    inst, age_hours, entry_time.isoformat(),
+                )
+                if self.discord_bot:
+                    try:
+                        await self.discord_bot._signal_channel.send(
+                            f"**STALE POSITION WARNING** — {inst} has been open "
+                            f"for {age_hours:.1f} hours (since {entry_time.strftime('%Y-%m-%d %H:%M')})"
+                        )
+                        self._discord_fail_count = 0
+                    except Exception as e:
+                        self._discord_fail_count += 1
+                        if self._discord_fail_count <= 3:
+                            logger.warning("Discord post failed (%d): %s", self._discord_fail_count, e)
+                        elif self._discord_fail_count == 4:
+                            logger.error("Discord appears disconnected — alerts not being delivered")
+
     def _write_heartbeat(self, status: str):
         """Write a heartbeat file for external monitoring."""
         heartbeat_path = os.path.join(
@@ -843,9 +920,12 @@ class TradingSystem:
             return t >= start or t <= end
 
     async def shutdown(self):
-        """Graceful shutdown."""
+        """Graceful shutdown with state persistence."""
         logger.info("Shutting down trading system...")
         self.is_running = False
+
+        # Save system state for recovery on restart
+        self._save_system_state()
 
         # Flatten positions if configured and executor available
         if self.executor and self.config["schedule"].get("flatten_eod"):

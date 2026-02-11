@@ -65,6 +65,7 @@ class TradingBot(commands.Bot):
         self.tree.add_command(closeall_cmd)
         self.tree.add_command(performance_cmd)
         self.tree.add_command(daily_cmd)
+        self.tree.add_command(stale_cmd)
         await self.tree.sync()
         logger.info("Slash commands synced")
 
@@ -532,6 +533,61 @@ async def daily_cmd(interaction: discord.Interaction):
             name="By Tier",
             value="\n".join(tier_lines) if tier_lines else "N/A",
             inline=False,
+        )
+
+    embed.set_footer(text="LaT-PFN Trading System")
+    await interaction.response.send_message(embed=embed)
+
+
+@app_commands.command(name="stale", description="List positions open longer than 24 hours")
+async def stale_cmd(interaction: discord.Interaction):
+    bot = get_bot()
+    if not bot or not bot._trading_system:
+        await interaction.response.send_message("Trading system not connected.", ephemeral=True)
+        return
+
+    ts = bot._trading_system
+    positions = ts.order_mgr.open_positions
+
+    if not positions:
+        await interaction.response.send_message("No open positions.", ephemeral=True)
+        return
+
+    now = datetime.now()
+    stale_threshold_hours = 24
+    stale_entries = []
+
+    for inst, pos in positions.items():
+        entry_time = getattr(pos, "entry_time", None)
+        if entry_time is None:
+            continue
+        age_hours = (now - entry_time).total_seconds() / 3600.0
+        if age_hours > stale_threshold_hours:
+            stale_entries.append((inst, pos, age_hours))
+
+    if not stale_entries:
+        await interaction.response.send_message(
+            "No stale positions (all open < 24 hours).", ephemeral=True
+        )
+        return
+
+    embed = discord.Embed(
+        title="Stale Positions (> 24 hours)",
+        color=0xFF4500,
+        timestamp=datetime.now(timezone.utc),
+    )
+
+    for inst, pos, age_hours in stale_entries:
+        dir_emoji = "\U0001F7E2" if pos.direction == "long" else "\U0001F534"
+        embed.add_field(
+            name=f"{dir_emoji} {inst}",
+            value=(
+                f"**{pos.direction.upper()}** {pos.size} contracts\n"
+                f"Entry: ${pos.entry_price:,.2f}\n"
+                f"Opened: {pos.entry_time.strftime('%Y-%m-%d %H:%M')}\n"
+                f"Age: **{age_hours:.1f} hours**"
+            ),
+            inline=True,
         )
 
     embed.set_footer(text="LaT-PFN Trading System")
