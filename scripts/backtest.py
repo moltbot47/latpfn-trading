@@ -298,7 +298,7 @@ def main():
     parser = argparse.ArgumentParser(description="LaT-PFN Trading Backtest")
     parser.add_argument("--instrument", type=str, default="MNQ",
                         help="Instrument symbol (e.g. MNQ, MYM, MES, M2K, MCL, M6E, M6B, M6A, M6J)")
-    parser.add_argument("--days", type=int, default=30, help="Days of history to backtest")
+    parser.add_argument("--days", type=int, default=60, help="Days of history to backtest (max ~60 for 5m data)")
     parser.add_argument("--interval", type=str, default="5m", help="Candle interval")
     parser.add_argument("--equity", type=float, default=50000, help="Starting account equity")
     parser.add_argument("--slippage", type=float, default=0, help="Slippage points added to entries/exits")
