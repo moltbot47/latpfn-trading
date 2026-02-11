@@ -5,19 +5,29 @@ Live trading dashboard — Flask web UI.
 Reads from existing data files (trade_log.db, positions.json, heartbeat.json,
 drawdown_state.json) and serves a real-time dashboard at http://localhost:5050.
 
+Features:
+  - Live account overview with progress-to-target
+  - Open positions with TP progress bars
+  - Performance stats, tier breakdown, equity curve
+  - Prediction accuracy by instrument and confidence
+  - Tradovate report upload for reconciliation
+  - Daily P&L history chart
+
 Usage:
     python scripts/dashboard.py
     python scripts/dashboard.py --port 8080
 """
 
 import argparse
+import csv
+import io
 import json
 import sqlite3
 import sys
 from datetime import datetime, date, timedelta
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, request
 
 # Project root
 ROOT = Path(__file__).parent.parent
@@ -26,9 +36,11 @@ sys.path.insert(0, str(ROOT))
 from config import load_config
 
 app = Flask(__name__, template_folder=str(ROOT / "templates"))
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB max upload
 
 DATA_DIR = ROOT / "data"
 DB_PATH = DATA_DIR / "trade_log.db"
+REPORT_DB_PATH = DATA_DIR / "broker_reports.db"
 POSITIONS_PATH = DATA_DIR / "positions.json"
 HEARTBEAT_PATH = DATA_DIR / "heartbeat.json"
 DRAWDOWN_PATH = DATA_DIR / "drawdown_state.json"
@@ -51,6 +63,54 @@ def _get_db():
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def _get_report_db():
+    conn = sqlite3.connect(str(REPORT_DB_PATH))
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    return conn
+
+
+def _init_report_db():
+    """Create broker report tables if they don't exist."""
+    conn = _get_report_db()
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS broker_snapshots (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            report_date TEXT NOT NULL,
+            actual_balance      REAL,
+            actual_pnl_today    REAL,
+            actual_total_pnl    REAL,
+            actual_trades_today INTEGER,
+            commissions         REAL DEFAULT 0,
+            notes               TEXT,
+            created_at          TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            UNIQUE(report_date)
+        );
+
+        CREATE TABLE IF NOT EXISTS broker_trades (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            report_date     TEXT NOT NULL,
+            timestamp       TEXT,
+            instrument      TEXT,
+            direction       TEXT,
+            quantity        INTEGER,
+            entry_price     REAL,
+            exit_price      REAL,
+            pnl             REAL,
+            commission      REAL DEFAULT 0,
+            order_id        TEXT,
+            raw_symbol      TEXT,
+            created_at      TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        );
+    """)
+    conn.commit()
+    conn.close()
+
+
+# Initialize on import
+_init_report_db()
 
 
 # ── API: System Status ─────────────────────────────────────────────────
@@ -113,7 +173,6 @@ def api_account():
         ep = p.get("entry_price", 0)
         sz = p.get("size", 0)
         if cp and ep:
-            # Look up contract size
             inst = p.get("instrument", "")
             inst_cfg = config.get("instruments", {}).get(inst, {})
             cs = inst_cfg.get("contract_size", 1.0)
@@ -123,6 +182,30 @@ def api_account():
                 unrealized += (ep - cp) * sz * cs
 
     cushion = highest + unrealized + daily_pnl - floor
+
+    # Check for broker override for today
+    broker_override = None
+    try:
+        rconn = _get_report_db()
+        today_str = date.today().isoformat()
+        row = rconn.execute(
+            "SELECT actual_balance, actual_pnl_today, actual_total_pnl FROM broker_snapshots WHERE report_date=?",
+            (today_str,),
+        ).fetchone()
+        if row and row["actual_balance"]:
+            broker_override = {
+                "actual_balance": row["actual_balance"],
+                "actual_pnl_today": row["actual_pnl_today"],
+                "actual_total_pnl": row["actual_total_pnl"],
+            }
+        rconn.close()
+    except Exception:
+        pass
+
+    profit_target = prop.get("profit_target_usd", 3000)
+    total_pnl = daily_pnl + unrealized
+    if broker_override and broker_override.get("actual_total_pnl") is not None:
+        total_pnl = broker_override["actual_total_pnl"]
 
     return jsonify({
         "starting_balance": starting,
@@ -134,7 +217,10 @@ def api_account():
         "estimated_equity": round(starting + daily_pnl + unrealized, 2),
         "cushion": round(cushion, 2),
         "max_daily_loss": prop.get("max_daily_loss_usd", 1000),
-        "profit_target": prop.get("profit_target_usd", 3000),
+        "profit_target": profit_target,
+        "total_pnl": round(total_pnl, 2),
+        "progress_pct": round(total_pnl / profit_target * 100, 1) if profit_target else 0,
+        "broker_override": broker_override,
     })
 
 
@@ -206,7 +292,6 @@ def api_performance():
         return jsonify({"error": "No database"})
 
     try:
-        # Overall stats
         rows = conn.execute(
             "SELECT pnl_dollars, shot_tier, exit_reason, direction, execution_status "
             "FROM trades WHERE execution_status='executed' AND pnl_dollars IS NOT NULL "
@@ -299,7 +384,7 @@ def api_recent_trades():
             "SELECT timestamp, instrument, direction, shot_tier, entry_price, "
             "stop_loss, take_profit, position_size, pnl_dollars, exit_reason, "
             "exit_price, time_in_trade_minutes, execution_status "
-            "FROM trades ORDER BY timestamp DESC LIMIT 25"
+            "FROM trades ORDER BY timestamp DESC LIMIT 50"
         ).fetchall()
         return jsonify([dict(r) for r in rows])
     except Exception as e:
@@ -329,7 +414,6 @@ def api_predictions():
 
         preds = [dict(r) for r in rows]
 
-        # Pair predictions: compare each to next observation for same instrument
         by_inst = {}
         for p in preds:
             inst = p["instrument"]
@@ -366,7 +450,6 @@ def api_predictions():
                     "accuracy": round(inst_correct / inst_eval * 100, 1),
                 }
 
-        # Confidence bins
         conf_bins = {}
         for inst, ps in by_inst.items():
             for i in range(len(ps) - 1):
@@ -413,6 +496,356 @@ def api_predictions():
         return jsonify({"error": str(e)})
     finally:
         conn.close()
+
+
+# ── API: Daily P&L History ────────────────────────────────────────────
+
+
+@app.route("/api/daily-history")
+def api_daily_history():
+    conn = _get_db()
+    if not conn:
+        return jsonify([])
+
+    try:
+        rows = conn.execute(
+            "SELECT DATE(timestamp) as trade_date, "
+            "COUNT(*) as trades, "
+            "SUM(CASE WHEN pnl_dollars > 0 THEN 1 ELSE 0 END) as wins, "
+            "COALESCE(SUM(pnl_dollars), 0) as pnl "
+            "FROM trades WHERE execution_status='executed' AND pnl_dollars IS NOT NULL "
+            "GROUP BY DATE(timestamp) ORDER BY trade_date"
+        ).fetchall()
+
+        days = []
+        cumulative = 0.0
+        for r in rows:
+            cumulative += r["pnl"]
+            day = {
+                "date": r["trade_date"],
+                "trades": r["trades"],
+                "wins": r["wins"],
+                "pnl": round(r["pnl"], 2),
+                "cumulative_pnl": round(cumulative, 2),
+            }
+
+            # Check for broker actual
+            try:
+                rconn = _get_report_db()
+                snap = rconn.execute(
+                    "SELECT actual_pnl_today, actual_total_pnl FROM broker_snapshots WHERE report_date=?",
+                    (r["trade_date"],),
+                ).fetchone()
+                if snap:
+                    day["actual_pnl"] = snap["actual_pnl_today"]
+                    day["actual_total_pnl"] = snap["actual_total_pnl"]
+                rconn.close()
+            except Exception:
+                pass
+
+            days.append(day)
+
+        return jsonify(days)
+    except Exception as e:
+        return jsonify({"error": str(e)})
+    finally:
+        conn.close()
+
+
+# ── API: Instrument Breakdown ─────────────────────────────────────────
+
+
+@app.route("/api/instruments")
+def api_instruments():
+    conn = _get_db()
+    if not conn:
+        return jsonify([])
+
+    try:
+        rows = conn.execute(
+            "SELECT instrument, direction, pnl_dollars, shot_tier "
+            "FROM trades WHERE execution_status='executed' AND pnl_dollars IS NOT NULL"
+        ).fetchall()
+
+        by_inst = {}
+        for r in rows:
+            inst = r["instrument"]
+            if inst not in by_inst:
+                by_inst[inst] = {"trades": 0, "wins": 0, "pnl": 0.0, "longs": 0, "shorts": 0}
+            by_inst[inst]["trades"] += 1
+            by_inst[inst]["pnl"] += r["pnl_dollars"]
+            if r["pnl_dollars"] > 0:
+                by_inst[inst]["wins"] += 1
+            if r["direction"] == "long":
+                by_inst[inst]["longs"] += 1
+            else:
+                by_inst[inst]["shorts"] += 1
+
+        result = []
+        for inst, s in sorted(by_inst.items()):
+            result.append({
+                "instrument": inst,
+                "trades": s["trades"],
+                "wins": s["wins"],
+                "win_rate": round(s["wins"] / s["trades"] * 100, 1) if s["trades"] else 0,
+                "pnl": round(s["pnl"], 2),
+                "avg_pnl": round(s["pnl"] / s["trades"], 2) if s["trades"] else 0,
+                "longs": s["longs"],
+                "shorts": s["shorts"],
+            })
+
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)})
+    finally:
+        conn.close()
+
+
+# ── API: Report Upload ────────────────────────────────────────────────
+
+
+@app.route("/api/reports/snapshot", methods=["POST"])
+def api_upload_snapshot():
+    """Upload a daily broker snapshot (balance, P&L)."""
+    data = request.get_json()
+    if not data or not data.get("report_date"):
+        return jsonify({"error": "report_date is required"}), 400
+
+    conn = _get_report_db()
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO broker_snapshots "
+            "(report_date, actual_balance, actual_pnl_today, actual_total_pnl, "
+            "actual_trades_today, commissions, notes) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                data["report_date"],
+                data.get("actual_balance"),
+                data.get("actual_pnl_today"),
+                data.get("actual_total_pnl"),
+                data.get("actual_trades_today"),
+                data.get("commissions", 0),
+                data.get("notes", ""),
+            ),
+        )
+        conn.commit()
+        return jsonify({"status": "ok", "date": data["report_date"]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/reports/snapshots")
+def api_list_snapshots():
+    """List all broker snapshots."""
+    conn = _get_report_db()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM broker_snapshots ORDER BY report_date DESC"
+        ).fetchall()
+        return jsonify([dict(r) for r in rows])
+    except Exception as e:
+        return jsonify({"error": str(e)})
+    finally:
+        conn.close()
+
+
+@app.route("/api/reports/snapshot/<int:snap_id>", methods=["DELETE"])
+def api_delete_snapshot(snap_id):
+    """Delete a broker snapshot."""
+    conn = _get_report_db()
+    try:
+        conn.execute("DELETE FROM broker_snapshots WHERE id=?", (snap_id,))
+        conn.commit()
+        return jsonify({"status": "deleted"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route("/api/reports/upload-csv", methods=["POST"])
+def api_upload_csv():
+    """Upload a Tradovate trade history CSV."""
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    file = request.files["file"]
+    if not file.filename.endswith(".csv"):
+        return jsonify({"error": "Must be a CSV file"}), 400
+
+    report_date = request.form.get("report_date", date.today().isoformat())
+
+    try:
+        content = file.read().decode("utf-8")
+        reader = csv.DictReader(io.StringIO(content))
+
+        conn = _get_report_db()
+        # Clear existing trades for this date
+        conn.execute("DELETE FROM broker_trades WHERE report_date=?", (report_date,))
+
+        imported = 0
+        for row in reader:
+            # Flexible column mapping for Tradovate exports
+            instrument = (
+                row.get("Product") or row.get("Symbol") or row.get("Contract")
+                or row.get("product") or row.get("symbol") or row.get("instrument") or ""
+            )
+            direction = (
+                row.get("Buy/Sell") or row.get("Side") or row.get("Action")
+                or row.get("buy/sell") or row.get("side") or row.get("direction") or ""
+            )
+            if direction.lower() in ("buy", "long"):
+                direction = "long"
+            elif direction.lower() in ("sell", "short"):
+                direction = "short"
+
+            def _float(key):
+                for k in [key, key.lower(), key.replace(" ", ""), key.title()]:
+                    val = row.get(k)
+                    if val:
+                        try:
+                            return float(str(val).replace(",", "").replace("$", ""))
+                        except ValueError:
+                            pass
+                return None
+
+            conn.execute(
+                "INSERT INTO broker_trades "
+                "(report_date, timestamp, instrument, direction, quantity, "
+                "entry_price, exit_price, pnl, commission, order_id, raw_symbol) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    report_date,
+                    row.get("Fill Time") or row.get("Time") or row.get("Date") or row.get("timestamp") or "",
+                    instrument,
+                    direction,
+                    _float("Qty") or _float("Quantity") or _float("quantity"),
+                    _float("Avg Fill Price") or _float("Entry Price") or _float("entry_price"),
+                    _float("Exit Price") or _float("exit_price"),
+                    _float("Realized P&L") or _float("P&L") or _float("pnl") or _float("Realized P/L"),
+                    _float("Commission") or _float("commission") or 0,
+                    row.get("Order ID") or row.get("order_id") or "",
+                    row.get("Contract") or row.get("Symbol") or "",
+                ),
+            )
+            imported += 1
+
+        conn.commit()
+        conn.close()
+        return jsonify({"status": "ok", "imported": imported, "date": report_date})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/reports/trades")
+def api_list_broker_trades():
+    """List uploaded broker trades."""
+    report_date = request.args.get("date")
+    conn = _get_report_db()
+    try:
+        if report_date:
+            rows = conn.execute(
+                "SELECT * FROM broker_trades WHERE report_date=? ORDER BY timestamp",
+                (report_date,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM broker_trades ORDER BY report_date DESC, timestamp LIMIT 100"
+            ).fetchall()
+        return jsonify([dict(r) for r in rows])
+    except Exception as e:
+        return jsonify({"error": str(e)})
+    finally:
+        conn.close()
+
+
+# ── API: Reconciliation ───────────────────────────────────────────────
+
+
+@app.route("/api/reconciliation")
+def api_reconciliation():
+    """Compare local estimates vs broker actuals."""
+    conn = _get_db()
+    rconn = _get_report_db()
+
+    result = {"days": [], "summary": {}}
+
+    try:
+        # Get all trading days from local DB
+        local_days = {}
+        if conn:
+            rows = conn.execute(
+                "SELECT DATE(timestamp) as trade_date, "
+                "COUNT(*) as trades, "
+                "COALESCE(SUM(pnl_dollars), 0) as pnl "
+                "FROM trades WHERE execution_status='executed' AND pnl_dollars IS NOT NULL "
+                "GROUP BY DATE(timestamp) ORDER BY trade_date"
+            ).fetchall()
+            for r in rows:
+                local_days[r["trade_date"]] = {
+                    "local_trades": r["trades"],
+                    "local_pnl": round(r["pnl"], 2),
+                }
+
+        # Get broker snapshots
+        broker_days = {}
+        snaps = rconn.execute(
+            "SELECT report_date, actual_balance, actual_pnl_today, actual_total_pnl, "
+            "actual_trades_today, commissions FROM broker_snapshots ORDER BY report_date"
+        ).fetchall()
+        for s in snaps:
+            broker_days[s["report_date"]] = {
+                "actual_balance": s["actual_balance"],
+                "actual_pnl": s["actual_pnl_today"],
+                "actual_total_pnl": s["actual_total_pnl"],
+                "actual_trades": s["actual_trades_today"],
+                "commissions": s["commissions"],
+            }
+
+        # Merge
+        all_dates = sorted(set(list(local_days.keys()) + list(broker_days.keys())))
+        total_local = 0.0
+        total_actual = 0.0
+        total_delta = 0.0
+
+        for d in all_dates:
+            local = local_days.get(d, {"local_trades": 0, "local_pnl": 0})
+            broker = broker_days.get(d, {})
+            delta = None
+            if broker.get("actual_pnl") is not None:
+                delta = round(local["local_pnl"] - broker["actual_pnl"], 2)
+                total_delta += delta
+                total_actual += broker["actual_pnl"]
+            total_local += local["local_pnl"]
+
+            result["days"].append({
+                "date": d,
+                "local_trades": local["local_trades"],
+                "local_pnl": local["local_pnl"],
+                "actual_pnl": broker.get("actual_pnl"),
+                "actual_balance": broker.get("actual_balance"),
+                "actual_trades": broker.get("actual_trades"),
+                "commissions": broker.get("commissions"),
+                "delta": delta,
+            })
+
+        result["summary"] = {
+            "total_local_pnl": round(total_local, 2),
+            "total_actual_pnl": round(total_actual, 2),
+            "total_delta": round(total_delta, 2),
+            "days_with_actuals": len(broker_days),
+            "days_total": len(all_dates),
+        }
+
+    except Exception as e:
+        result["error"] = str(e)
+    finally:
+        if conn:
+            conn.close()
+        rconn.close()
+
+    return jsonify(result)
 
 
 # ── Main page ──────────────────────────────────────────────────────────

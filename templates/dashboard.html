@@ -6,22 +6,34 @@
 <title>LaT-PFN Trading Dashboard</title>
 <style>
   :root {
-    --bg: #0d1117; --card: #161b22; --border: #30363d;
+    --bg: #0d1117; --card: #161b22; --card2: #1c2129; --border: #30363d;
     --text: #c9d1d9; --muted: #8b949e; --accent: #58a6ff;
     --green: #3fb950; --red: #f85149; --yellow: #d29922;
-    --purple: #bc8cff;
+    --purple: #bc8cff; --cyan: #39d5ff; --orange: #f0883e;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: var(--bg); color: var(--text); font-family: -apple-system, 'SF Mono', 'Fira Code', monospace; font-size: 13px; }
-  .header { background: var(--card); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; }
-  .header h1 { font-size: 16px; color: var(--accent); font-weight: 600; }
+
+  /* Header */
+  .header { background: var(--card); border-bottom: 1px solid var(--border); padding: 10px 24px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+  .header h1 { font-size: 15px; color: var(--accent); font-weight: 600; }
   .header .status { display: flex; align-items: center; gap: 12px; }
   .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
   .dot.alive { background: var(--green); box-shadow: 0 0 6px var(--green); }
   .dot.dead { background: var(--red); box-shadow: 0 0 6px var(--red); }
+
+  /* Tabs */
+  .tabs { background: var(--card); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; gap: 0; overflow-x: auto; }
+  .tab { padding: 10px 20px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; font-size: 12px; font-weight: 500; white-space: nowrap; transition: all 0.2s; }
+  .tab:hover { color: var(--text); background: rgba(88,166,255,0.05); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Layout */
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; padding: 12px 24px; }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
-  .card h2 { font-size: 12px; text-transform: uppercase; color: var(--muted); letter-spacing: 1px; margin-bottom: 12px; }
+  .card h2 { font-size: 11px; text-transform: uppercase; color: var(--muted); letter-spacing: 1px; margin-bottom: 12px; }
   .metric { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid var(--border); }
   .metric:last-child { border-bottom: none; }
   .metric .label { color: var(--muted); }
@@ -30,22 +42,76 @@
   .negative { color: var(--red); }
   .warning { color: var(--yellow); }
   .neutral { color: var(--muted); }
+  .wide { grid-column: 1 / -1; }
+
+  /* Tables */
   table { width: 100%; border-collapse: collapse; font-size: 12px; }
   th { text-align: left; color: var(--muted); font-weight: 500; padding: 6px 8px; border-bottom: 1px solid var(--border); }
   td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
   tr:hover { background: rgba(88,166,255,0.05); }
+
+  /* Badges */
   .badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
   .badge.long { background: rgba(63,185,80,0.15); color: var(--green); }
   .badge.short { background: rgba(248,81,73,0.15); color: var(--red); }
   .badge.stale { background: rgba(210,153,34,0.15); color: var(--yellow); }
-  .wide { grid-column: 1 / -1; }
-  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* Progress bars */
   .progress-bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 4px; }
-  .progress-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
-  .equity-chart { width: 100%; height: 120px; }
-  canvas { width: 100% !important; height: 120px !important; }
+  .progress-fill { height: 100%; border-radius: 2px; transition: width 0.5s; }
+
+  /* Gauge */
+  .gauge-container { text-align: center; padding: 8px 0; }
+  .gauge-bar { height: 20px; background: var(--border); border-radius: 10px; overflow: hidden; position: relative; margin: 8px 0; }
+  .gauge-fill { height: 100%; border-radius: 10px; transition: width 0.5s; position: relative; }
+  .gauge-label { font-size: 11px; color: var(--muted); }
+  .gauge-value { font-size: 20px; font-weight: 700; margin: 4px 0; }
+  .gauge-sublabel { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* Risk meters */
+  .risk-meter { margin: 8px 0; }
+  .risk-meter .rm-header { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .risk-meter .rm-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .risk-meter .rm-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+
+  /* Canvas */
+  canvas { width: 100% !important; }
+
+  /* Forms */
+  .form-group { margin-bottom: 12px; }
+  .form-group label { display: block; color: var(--muted); font-size: 11px; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .form-group input, .form-group textarea, .form-group select {
+    width: 100%; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); font-size: 13px; font-family: inherit;
+  }
+  .form-group input:focus, .form-group textarea:focus { outline: none; border-color: var(--accent); }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .btn { padding: 8px 16px; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #79b8ff; }
+  .btn-danger { background: var(--red); color: #fff; }
+  .btn-danger:hover { opacity: 0.85; }
+  .btn-sm { padding: 4px 10px; font-size: 11px; }
+  .alert { padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; font-size: 12px; }
+  .alert-success { background: rgba(63,185,80,0.15); color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
+  .alert-error { background: rgba(248,81,73,0.15); color: var(--red); border: 1px solid rgba(248,81,73,0.3); }
+
+  /* File upload */
+  .file-drop { border: 2px dashed var(--border); border-radius: 8px; padding: 24px; text-align: center; color: var(--muted); cursor: pointer; transition: all 0.2s; }
+  .file-drop:hover { border-color: var(--accent); color: var(--accent); }
+  .file-drop input { display: none; }
+
+  /* Footer */
   .footer { text-align: center; padding: 8px; color: var(--muted); font-size: 11px; }
-  @media (max-width: 768px) { .grid { grid-template-columns: 1fr; padding: 8px; } .two-col { grid-template-columns: 1fr; } }
+
+  /* Two columns for some sections */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  @media (max-width: 768px) {
+    .grid { grid-template-columns: 1fr; padding: 8px; }
+    .split { grid-template-columns: 1fr; }
+    .form-row { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
@@ -53,99 +119,342 @@
 <div class="header">
   <h1>LaT-PFN Trading Dashboard</h1>
   <div class="status">
-    <span id="cycle-info" class="muted">Loading...</span>
+    <span id="cycle-info" style="color:var(--muted);font-size:11px;">Loading...</span>
     <span class="dot" id="status-dot"></span>
     <span id="last-update" style="color:var(--muted);font-size:11px;"></span>
   </div>
 </div>
 
-<div class="grid">
+<div class="tabs">
+  <div class="tab active" data-tab="overview">Overview</div>
+  <div class="tab" data-tab="positions">Positions</div>
+  <div class="tab" data-tab="performance">Performance</div>
+  <div class="tab" data-tab="reports">Reports</div>
+  <div class="tab" data-tab="reconciliation">Reconciliation</div>
+</div>
 
-  <!-- Account Overview -->
-  <div class="card">
-    <h2>Account Overview</h2>
-    <div class="metric"><span class="label">Estimated Equity</span><span class="value" id="equity">--</span></div>
-    <div class="metric"><span class="label">Daily P&L</span><span class="value" id="daily-pnl">--</span></div>
-    <div class="metric"><span class="label">Unrealized P&L</span><span class="value" id="unrealized-pnl">--</span></div>
-    <div class="metric"><span class="label">Drawdown Floor</span><span class="value" id="dd-floor">--</span></div>
-    <div class="metric"><span class="label">Cushion</span><span class="value" id="cushion">--</span></div>
-    <div class="metric"><span class="label">High Water Mark</span><span class="value" id="hwm">--</span></div>
-    <div class="metric"><span class="label">Floor Locked</span><span class="value" id="floor-locked">--</span></div>
+<!-- ═══════════════ OVERVIEW TAB ═══════════════ -->
+<div class="tab-panel active" id="tab-overview">
+  <div class="grid">
+
+    <!-- Progress to Target -->
+    <div class="card">
+      <h2>Progress to Profit Target</h2>
+      <div class="gauge-container">
+        <div class="gauge-value" id="progress-pct">--</div>
+        <div class="gauge-bar">
+          <div class="gauge-fill" id="progress-fill" style="width:0%;background:var(--accent);"></div>
+        </div>
+        <div class="gauge-sublabel"><span id="progress-pnl">--</span> of <span id="progress-target">--</span></div>
+      </div>
+      <div id="broker-badge" style="display:none;margin-top:8px;padding:6px 10px;background:rgba(57,213,255,0.1);border:1px solid rgba(57,213,255,0.3);border-radius:6px;font-size:11px;color:var(--cyan);">
+        Using broker-reported balance
+      </div>
+    </div>
+
+    <!-- Account Overview -->
+    <div class="card">
+      <h2>Account Overview</h2>
+      <div class="metric"><span class="label">Estimated Equity</span><span class="value" id="equity">--</span></div>
+      <div class="metric"><span class="label">Starting Balance</span><span class="value" id="starting-bal">--</span></div>
+      <div class="metric"><span class="label">Daily P&L (Local)</span><span class="value" id="daily-pnl">--</span></div>
+      <div class="metric"><span class="label">Unrealized P&L</span><span class="value" id="unrealized-pnl">--</span></div>
+      <div class="metric"><span class="label">High Water Mark</span><span class="value" id="hwm">--</span></div>
+      <div class="metric"><span class="label">Floor Locked</span><span class="value" id="floor-locked">--</span></div>
+    </div>
+
+    <!-- Risk Meters -->
+    <div class="card">
+      <h2>Risk Gauges</h2>
+      <div class="risk-meter">
+        <div class="rm-header">
+          <span class="label">Daily Loss Used</span>
+          <span class="value" id="daily-loss-pct">--</span>
+        </div>
+        <div class="rm-bar"><div class="rm-fill" id="daily-loss-fill" style="width:0%;background:var(--green)"></div></div>
+      </div>
+      <div class="risk-meter">
+        <div class="rm-header">
+          <span class="label">Drawdown Cushion</span>
+          <span class="value" id="cushion-val">--</span>
+        </div>
+        <div class="rm-bar"><div class="rm-fill" id="cushion-fill" style="width:100%;background:var(--green)"></div></div>
+      </div>
+      <div class="metric" style="margin-top:8px;"><span class="label">Drawdown Floor</span><span class="value" id="dd-floor">--</span></div>
+      <div class="metric"><span class="label">Max Daily Loss</span><span class="value" id="max-daily-loss">--</span></div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="card">
+      <h2>Performance Summary</h2>
+      <div class="metric"><span class="label">Total Trades</span><span class="value" id="total-trades">--</span></div>
+      <div class="metric"><span class="label">Win Rate</span><span class="value" id="win-rate">--</span></div>
+      <div class="metric"><span class="label">Total P&L</span><span class="value" id="total-pnl">--</span></div>
+      <div class="metric"><span class="label">Profit Factor</span><span class="value" id="profit-factor">--</span></div>
+      <div class="metric"><span class="label">Avg Win / Avg Loss</span><span class="value" id="avg-win-loss">--</span></div>
+      <div class="metric"><span class="label">Max Drawdown</span><span class="value" id="max-dd">--</span></div>
+      <div class="metric"><span class="label">Long / Short P&L</span><span class="value" id="dir-pnl">--</span></div>
+    </div>
+
+    <!-- Prediction Accuracy -->
+    <div class="card">
+      <h2>Prediction Accuracy</h2>
+      <div class="metric"><span class="label">Overall Accuracy</span><span class="value" id="pred-accuracy">--</span></div>
+      <div class="metric"><span class="label">Evaluated / Total</span><span class="value" id="pred-count">--</span></div>
+      <div id="pred-instruments"></div>
+      <div id="pred-confidence" style="margin-top:8px;"></div>
+    </div>
+
+    <!-- Instrument Breakdown -->
+    <div class="card">
+      <h2>Instrument Breakdown</h2>
+      <table>
+        <thead><tr><th>Instrument</th><th>Trades</th><th>WR%</th><th>P&L</th><th>Avg</th></tr></thead>
+        <tbody id="inst-body"><tr><td colspan="5" style="color:var(--muted)">Loading...</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- Open Positions (compact) -->
+    <div class="card wide">
+      <h2>Open Positions (<span id="pos-count">0</span>)</h2>
+      <table>
+        <thead><tr><th>Instrument</th><th>Direction</th><th>Size</th><th>Entry</th><th>Current</th><th>Unrealized</th><th>TP Progress</th><th>Time Held</th><th>SL</th><th>TP</th></tr></thead>
+        <tbody id="positions-body"><tr><td colspan="10" style="text-align:center;color:var(--muted)">Loading...</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- Equity Curve -->
+    <div class="card wide">
+      <h2>Equity Curve</h2>
+      <canvas id="equity-canvas" style="height:140px;"></canvas>
+    </div>
+
   </div>
+</div>
 
-  <!-- Performance Summary -->
-  <div class="card">
-    <h2>Performance Summary</h2>
-    <div class="metric"><span class="label">Total Trades</span><span class="value" id="total-trades">--</span></div>
-    <div class="metric"><span class="label">Win Rate</span><span class="value" id="win-rate">--</span></div>
-    <div class="metric"><span class="label">Total P&L</span><span class="value" id="total-pnl">--</span></div>
-    <div class="metric"><span class="label">Profit Factor</span><span class="value" id="profit-factor">--</span></div>
-    <div class="metric"><span class="label">Avg Win / Avg Loss</span><span class="value" id="avg-win-loss">--</span></div>
-    <div class="metric"><span class="label">Max Drawdown</span><span class="value" id="max-dd">--</span></div>
-    <div class="metric"><span class="label">Long / Short P&L</span><span class="value" id="dir-pnl">--</span></div>
+<!-- ═══════════════ POSITIONS TAB ═══════════════ -->
+<div class="tab-panel" id="tab-positions">
+  <div class="grid">
+    <div class="card wide">
+      <h2>Open Positions (<span id="pos-count2">0</span>)</h2>
+      <table>
+        <thead><tr><th>Instrument</th><th>Name</th><th>Direction</th><th>Contracts</th><th>Entry Price</th><th>Current Price</th><th>Unrealized P&L</th><th>TP Progress</th><th>Time Held</th><th>Stop Loss</th><th>Take Profit</th><th>Status</th></tr></thead>
+        <tbody id="positions-body2"><tr><td colspan="12" style="text-align:center;color:var(--muted)">Loading...</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="card wide">
+      <h2>Recent Trades (Last 50)</h2>
+      <table>
+        <thead><tr><th>Time</th><th>Instrument</th><th>Dir</th><th>Tier</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Reason</th><th>Duration</th><th>Status</th></tr></thead>
+        <tbody id="trades-body"><tr><td colspan="10" style="color:var(--muted)">Loading...</td></tr></tbody>
+      </table>
+    </div>
   </div>
+</div>
 
-  <!-- Prediction Accuracy -->
-  <div class="card">
-    <h2>Prediction Accuracy</h2>
-    <div class="metric"><span class="label">Overall Accuracy</span><span class="value" id="pred-accuracy">--</span></div>
-    <div class="metric"><span class="label">Evaluated / Total</span><span class="value" id="pred-count">--</span></div>
-    <div id="pred-instruments"></div>
-    <div id="pred-confidence" style="margin-top:8px;"></div>
+<!-- ═══════════════ PERFORMANCE TAB ═══════════════ -->
+<div class="tab-panel" id="tab-performance">
+  <div class="grid">
+
+    <!-- Daily P&L Chart -->
+    <div class="card wide">
+      <h2>Daily P&L</h2>
+      <canvas id="daily-pnl-canvas" style="height:180px;"></canvas>
+    </div>
+
+    <!-- Per-Tier Breakdown -->
+    <div class="card">
+      <h2>Shot Tier Performance</h2>
+      <table>
+        <thead><tr><th>Tier</th><th>Trades</th><th>Wins</th><th>WR%</th><th>P&L</th><th>Avg</th><th>PF</th></tr></thead>
+        <tbody id="tier-body"><tr><td colspan="7" style="color:var(--muted)">Loading...</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- Exit Reasons -->
+    <div class="card">
+      <h2>Exit Reasons</h2>
+      <div id="exit-reasons"></div>
+    </div>
+
+    <!-- Instrument Performance -->
+    <div class="card wide">
+      <h2>Instrument Performance</h2>
+      <table>
+        <thead><tr><th>Instrument</th><th>Trades</th><th>Wins</th><th>Win Rate</th><th>P&L</th><th>Avg P&L</th><th>Long/Short</th></tr></thead>
+        <tbody id="inst-body2"><tr><td colspan="7" style="color:var(--muted)">Loading...</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- Equity Curve (large) -->
+    <div class="card wide">
+      <h2>Equity Curve</h2>
+      <canvas id="equity-canvas2" style="height:200px;"></canvas>
+    </div>
+
+    <!-- Prediction Accuracy Detail -->
+    <div class="card">
+      <h2>Prediction Accuracy by Instrument</h2>
+      <div id="pred-instruments2"></div>
+    </div>
+
+    <div class="card">
+      <h2>Prediction Accuracy by Confidence</h2>
+      <div id="pred-confidence2"></div>
+    </div>
+
   </div>
+</div>
 
-  <!-- Open Positions -->
-  <div class="card wide">
-    <h2>Open Positions (<span id="pos-count">0</span>)</h2>
-    <table>
-      <thead><tr><th>Instrument</th><th>Direction</th><th>Size</th><th>Entry</th><th>Current</th><th>Unrealized</th><th>TP Progress</th><th>Time Held</th><th>SL</th><th>TP</th></tr></thead>
-      <tbody id="positions-body"><tr><td colspan="10" style="text-align:center;color:var(--muted)">Loading...</td></tr></tbody>
-    </table>
+<!-- ═══════════════ REPORTS TAB ═══════════════ -->
+<div class="tab-panel" id="tab-reports">
+  <div class="grid">
+
+    <!-- Daily Snapshot Form -->
+    <div class="card">
+      <h2>Submit Daily Broker Report</h2>
+      <div id="snapshot-alert"></div>
+      <div class="form-group">
+        <label>Report Date</label>
+        <input type="date" id="snap-date">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Actual Account Balance</label>
+          <input type="number" step="0.01" id="snap-balance" placeholder="e.g. 51250.00">
+        </div>
+        <div class="form-group">
+          <label>Actual P&L Today</label>
+          <input type="number" step="0.01" id="snap-pnl-today" placeholder="e.g. 350.50">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Actual Total P&L (since start)</label>
+          <input type="number" step="0.01" id="snap-total-pnl" placeholder="e.g. 1250.00">
+        </div>
+        <div class="form-group">
+          <label>Number of Trades Today</label>
+          <input type="number" id="snap-trades" placeholder="e.g. 5">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Commissions</label>
+          <input type="number" step="0.01" id="snap-comm" placeholder="e.g. 12.50">
+        </div>
+        <div class="form-group">
+          <label>Notes</label>
+          <input type="text" id="snap-notes" placeholder="Optional notes...">
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="submitSnapshot()">Submit Report</button>
+    </div>
+
+    <!-- CSV Upload -->
+    <div class="card">
+      <h2>Upload Tradovate Trade CSV</h2>
+      <div id="csv-alert"></div>
+      <div class="form-group">
+        <label>Report Date</label>
+        <input type="date" id="csv-date">
+      </div>
+      <div class="file-drop" id="file-drop" onclick="document.getElementById('csv-file').click()">
+        <input type="file" id="csv-file" accept=".csv" onchange="handleFileSelect(this)">
+        <div style="font-size:20px;margin-bottom:8px;">Drop CSV here or click to browse</div>
+        <div id="file-name" style="color:var(--accent);">No file selected</div>
+      </div>
+      <div style="margin-top:12px;">
+        <button class="btn btn-primary" onclick="uploadCSV()">Upload CSV</button>
+      </div>
+      <div style="margin-top:12px;font-size:11px;color:var(--muted);">
+        Accepts Tradovate trade history CSV. Columns auto-detected: Product/Symbol, Buy/Sell/Side, Qty, Avg Fill Price, Realized P&L, Commission, etc.
+      </div>
+    </div>
+
+    <!-- Submitted Reports -->
+    <div class="card wide">
+      <h2>Submitted Broker Reports</h2>
+      <table>
+        <thead><tr><th>Date</th><th>Balance</th><th>P&L Today</th><th>Total P&L</th><th>Trades</th><th>Commissions</th><th>Notes</th><th>Submitted</th><th></th></tr></thead>
+        <tbody id="snapshots-body"><tr><td colspan="9" style="color:var(--muted)">Loading...</td></tr></tbody>
+      </table>
+    </div>
+
   </div>
+</div>
 
-  <!-- Per-Tier Breakdown -->
-  <div class="card">
-    <h2>Shot Tier Performance</h2>
-    <table>
-      <thead><tr><th>Tier</th><th>Trades</th><th>WR%</th><th>P&L</th><th>PF</th></tr></thead>
-      <tbody id="tier-body"><tr><td colspan="5" style="color:var(--muted)">Loading...</td></tr></tbody>
-    </table>
+<!-- ═══════════════ RECONCILIATION TAB ═══════════════ -->
+<div class="tab-panel" id="tab-reconciliation">
+  <div class="grid">
+
+    <!-- Summary -->
+    <div class="card">
+      <h2>Reconciliation Summary</h2>
+      <div class="metric"><span class="label">Total Local P&L</span><span class="value" id="recon-local-pnl">--</span></div>
+      <div class="metric"><span class="label">Total Broker P&L</span><span class="value" id="recon-actual-pnl">--</span></div>
+      <div class="metric"><span class="label">Delta (Local - Actual)</span><span class="value" id="recon-delta">--</span></div>
+      <div class="metric"><span class="label">Days With Actuals</span><span class="value" id="recon-days">--</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Data Quality</h2>
+      <div id="recon-quality"></div>
+    </div>
+
+    <!-- Day-by-day -->
+    <div class="card wide">
+      <h2>Day-by-Day Comparison</h2>
+      <table>
+        <thead><tr><th>Date</th><th>Local Trades</th><th>Local P&L</th><th>Broker Trades</th><th>Broker P&L</th><th>Balance</th><th>Commissions</th><th>Delta</th></tr></thead>
+        <tbody id="recon-body"><tr><td colspan="8" style="color:var(--muted)">Loading...</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- Reconciliation Chart -->
+    <div class="card wide">
+      <h2>Local vs Broker P&L Over Time</h2>
+      <canvas id="recon-canvas" style="height:180px;"></canvas>
+    </div>
+
   </div>
-
-  <!-- Exit Reasons -->
-  <div class="card">
-    <h2>Exit Reasons</h2>
-    <div id="exit-reasons"></div>
-  </div>
-
-  <!-- Equity Curve -->
-  <div class="card wide">
-    <h2>Equity Curve</h2>
-    <canvas id="equity-canvas"></canvas>
-  </div>
-
-  <!-- Recent Trades -->
-  <div class="card wide">
-    <h2>Recent Trades</h2>
-    <table>
-      <thead><tr><th>Time</th><th>Instrument</th><th>Dir</th><th>Tier</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Reason</th><th>Duration</th></tr></thead>
-      <tbody id="trades-body"><tr><td colspan="9" style="color:var(--muted)">Loading...</td></tr></tbody>
-    </table>
-  </div>
-
 </div>
 
 <div class="footer">Auto-refreshes every 15s | LaT-PFN Automated Futures Trading</div>
 
 <script>
+// ── Helpers ──────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const pnlClass = v => v > 0 ? 'positive' : v < 0 ? 'negative' : 'neutral';
-const fmt = v => v >= 0 ? `$${v.toLocaleString('en-US', {minimumFractionDigits:2})}` : `-$${Math.abs(v).toLocaleString('en-US', {minimumFractionDigits:2})}`;
+const fmt = v => v >= 0 ? `$${v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}` : `-$${Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 
 async function fetchJSON(url) {
   try { const r = await fetch(url); return await r.json(); } catch { return null; }
 }
 
+// Set default dates
+document.addEventListener('DOMContentLoaded', () => {
+  const today = new Date().toISOString().split('T')[0];
+  if($('snap-date')) $('snap-date').value = today;
+  if($('csv-date')) $('csv-date').value = today;
+});
+
+// ── Tabs ─────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    $('tab-' + tab.dataset.tab).classList.add('active');
+    // Refresh data when switching tabs
+    if(tab.dataset.tab === 'reports') refreshSnapshots();
+    if(tab.dataset.tab === 'reconciliation') refreshReconciliation();
+    if(tab.dataset.tab === 'performance') { refreshPerformance(); refreshDailyHistory(); refreshInstruments(); }
+  });
+});
+
+// ── Status ───────────────────────────────────────────────────────
 async function refreshStatus() {
   const d = await fetchJSON('/api/status');
   if (!d) return;
@@ -159,38 +468,88 @@ async function refreshStatus() {
     : 'No heartbeat';
 }
 
+// ── Account ──────────────────────────────────────────────────────
 async function refreshAccount() {
   const d = await fetchJSON('/api/account');
   if (!d) return;
+
   $('equity').textContent = fmt(d.estimated_equity);
-  $('equity').className = 'value';
+  $('starting-bal').textContent = fmt(d.starting_balance);
   $('daily-pnl').textContent = fmt(d.daily_pnl);
   $('daily-pnl').className = 'value ' + pnlClass(d.daily_pnl);
   $('unrealized-pnl').textContent = fmt(d.unrealized_pnl);
   $('unrealized-pnl').className = 'value ' + pnlClass(d.unrealized_pnl);
   $('dd-floor').textContent = fmt(d.drawdown_floor);
-  $('cushion').textContent = fmt(d.cushion);
-  $('cushion').className = 'value ' + (d.cushion < 500 ? 'negative' : d.cushion < 1000 ? 'warning' : 'positive');
   $('hwm').textContent = fmt(d.highest_balance);
   $('floor-locked').textContent = d.floor_locked ? 'YES' : 'No';
   $('floor-locked').className = 'value ' + (d.floor_locked ? 'positive' : 'neutral');
+  $('max-daily-loss').textContent = fmt(d.max_daily_loss);
+
+  // Progress gauge
+  const pct = Math.max(0, Math.min(d.progress_pct, 100));
+  $('progress-pct').textContent = `${pct.toFixed(1)}%`;
+  $('progress-pct').className = 'gauge-value ' + (pct >= 100 ? 'positive' : pct >= 50 ? 'warning' : '');
+  $('progress-fill').style.width = `${pct}%`;
+  $('progress-fill').style.background = pct >= 100 ? 'var(--green)' : pct >= 75 ? 'var(--yellow)' : 'var(--accent)';
+  $('progress-pnl').textContent = fmt(d.total_pnl);
+  $('progress-target').textContent = fmt(d.profit_target);
+
+  // Broker override badge
+  if (d.broker_override) {
+    $('broker-badge').style.display = 'block';
+    $('broker-badge').textContent = `Broker actual: ${fmt(d.broker_override.actual_balance)} (Total P&L: ${fmt(d.broker_override.actual_total_pnl || 0)})`;
+  } else {
+    $('broker-badge').style.display = 'none';
+  }
+
+  // Risk meters
+  // Daily loss
+  const dailyUsed = Math.abs(Math.min(d.daily_pnl, 0));
+  const dailyPct = Math.min(dailyUsed / d.max_daily_loss * 100, 100);
+  $('daily-loss-pct').textContent = `${fmt(-dailyUsed)} / ${fmt(d.max_daily_loss)}`;
+  $('daily-loss-fill').style.width = `${dailyPct}%`;
+  $('daily-loss-fill').style.background = dailyPct >= 80 ? 'var(--red)' : dailyPct >= 50 ? 'var(--yellow)' : 'var(--green)';
+
+  // Cushion
+  const maxCushion = d.highest_balance - d.drawdown_floor;
+  const cushionPct = maxCushion > 0 ? Math.min(d.cushion / maxCushion * 100, 100) : 100;
+  $('cushion-val').textContent = fmt(d.cushion);
+  $('cushion-val').className = 'value ' + (d.cushion < 500 ? 'negative' : d.cushion < 1000 ? 'warning' : 'positive');
+  $('cushion-fill').style.width = `${cushionPct}%`;
+  $('cushion-fill').style.background = cushionPct <= 20 ? 'var(--red)' : cushionPct <= 40 ? 'var(--yellow)' : 'var(--green)';
 }
 
+// ── Positions ────────────────────────────────────────────────────
 async function refreshPositions() {
   const d = await fetchJSON('/api/positions');
   if (!d || !Array.isArray(d)) return;
   $('pos-count').textContent = d.length;
-  if (d.length === 0) {
-    $('positions-body').innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted)">No open positions</td></tr>';
-    return;
-  }
-  $('positions-body').innerHTML = d.map(p => {
+  $('pos-count2').textContent = d.length;
+
+  const renderRow = (p, full) => {
     const held = p.held_minutes > 60 ? `${(p.held_minutes/60).toFixed(1)}h` : `${Math.round(p.held_minutes)}m`;
     const tpPct = Math.min(Math.max(p.tp_progress_pct, -100), 100);
     const barColor = tpPct >= 75 ? 'var(--green)' : tpPct >= 0 ? 'var(--accent)' : 'var(--red)';
+    const staleTag = p.stale ? ' <span class="badge stale">STALE</span>' : '';
+    if (full) {
+      return `<tr>
+        <td><strong>${p.instrument}</strong></td>
+        <td>${p.name}</td>
+        <td><span class="badge ${p.direction}">${p.direction.toUpperCase()}</span></td>
+        <td>${p.size}</td>
+        <td>${p.entry_price.toFixed(2)}</td>
+        <td>${p.current_price ? p.current_price.toFixed(2) : '--'}</td>
+        <td class="${pnlClass(p.unrealized_pnl)}">${fmt(p.unrealized_pnl)}</td>
+        <td>${tpPct.toFixed(0)}%<div class="progress-bar"><div class="progress-fill" style="width:${Math.abs(tpPct)}%;background:${barColor}"></div></div></td>
+        <td>${held}</td>
+        <td>${p.stop_loss.toFixed(2)}</td>
+        <td>${p.take_profit.toFixed(2)}</td>
+        <td>${staleTag || '<span style="color:var(--green)">OK</span>'}</td>
+      </tr>`;
+    }
     return `<tr>
       <td><strong>${p.instrument}</strong><br><span style="color:var(--muted);font-size:11px">${p.name}</span></td>
-      <td><span class="badge ${p.direction}">${p.direction.toUpperCase()}</span>${p.stale ? ' <span class="badge stale">STALE</span>' : ''}</td>
+      <td><span class="badge ${p.direction}">${p.direction.toUpperCase()}</span>${staleTag}</td>
       <td>${p.size}</td>
       <td>${p.entry_price.toFixed(2)}</td>
       <td>${p.current_price ? p.current_price.toFixed(2) : '--'}</td>
@@ -200,12 +559,18 @@ async function refreshPositions() {
       <td>${p.stop_loss.toFixed(2)}</td>
       <td>${p.take_profit.toFixed(2)}</td>
     </tr>`;
-  }).join('');
+  };
+
+  const empty = '<tr><td colspan="12" style="text-align:center;color:var(--muted)">No open positions</td></tr>';
+  $('positions-body').innerHTML = d.length ? d.map(p => renderRow(p, false)).join('') : empty;
+  $('positions-body2').innerHTML = d.length ? d.map(p => renderRow(p, true)).join('') : empty;
 }
 
+// ── Performance ──────────────────────────────────────────────────
 async function refreshPerformance() {
   const d = await fetchJSON('/api/performance');
   if (!d || d.error || !d.total_trades) return;
+
   $('total-trades').textContent = d.total_trades;
   $('win-rate').textContent = `${d.win_rate}%`;
   $('win-rate').className = 'value ' + (d.win_rate >= 60 ? 'positive' : d.win_rate >= 50 ? 'warning' : 'negative');
@@ -225,13 +590,14 @@ async function refreshPerformance() {
     const s = d.per_tier[t];
     if (!s) continue;
     tierHtml += `<tr>
-      <td>${t}</td><td>${s.count}</td>
+      <td>${t}</td><td>${s.count}</td><td>${s.wins}</td>
       <td class="${s.win_rate >= 60 ? 'positive' : s.win_rate >= 50 ? 'warning' : 'negative'}">${s.win_rate}%</td>
       <td class="${pnlClass(s.total_pnl)}">${fmt(s.total_pnl)}</td>
+      <td>${fmt(s.avg_pnl)}</td>
       <td>${s.profit_factor >= 99 ? 'Inf' : s.profit_factor.toFixed(1)}</td>
     </tr>`;
   }
-  $('tier-body').innerHTML = tierHtml || '<tr><td colspan="5" style="color:var(--muted)">No data</td></tr>';
+  $('tier-body').innerHTML = tierHtml || '<tr><td colspan="7" style="color:var(--muted)">No data</td></tr>';
 
   // Exit reasons
   let exitHtml = '';
@@ -239,19 +605,19 @@ async function refreshPerformance() {
     const icon = reason === 'take_profit' ? 'positive' : reason === 'stop_loss' ? 'negative' : 'warning';
     exitHtml += `<div class="metric"><span class="label">${reason}</span><span class="value ${icon}">${count}</span></div>`;
   }
-  $('exit-reasons').innerHTML = exitHtml || '<div class="metric"><span class="label">No exits yet</span></div>';
+  $('exit-reasons').innerHTML = exitHtml || '<div style="color:var(--muted)">No exits yet</div>';
 
-  // Equity curve
-  drawEquityCurve(d.equity_curve || []);
+  // Equity curves
+  drawEquityCurve(d.equity_curve || [], 'equity-canvas', 140);
+  drawEquityCurve(d.equity_curve || [], 'equity-canvas2', 200);
 }
 
-function drawEquityCurve(data) {
-  const canvas = $('equity-canvas');
+function drawEquityCurve(data, canvasId, h) {
+  const canvas = $(canvasId);
   if (!data.length || !canvas) return;
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
   const w = canvas.clientWidth;
-  const h = canvas.clientHeight;
   canvas.width = w * dpr;
   canvas.height = h * dpr;
   ctx.scale(dpr, dpr);
@@ -267,10 +633,7 @@ function drawEquityCurve(data) {
   ctx.strokeStyle = 'rgba(139,148,158,0.3)';
   ctx.lineWidth = 1;
   ctx.setLineDash([4, 4]);
-  ctx.beginPath();
-  ctx.moveTo(0, zeroY);
-  ctx.lineTo(w, zeroY);
-  ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, zeroY); ctx.lineTo(w, zeroY); ctx.stroke();
   ctx.setLineDash([]);
 
   // Curve
@@ -285,19 +648,19 @@ function drawEquityCurve(data) {
   ctx.stroke();
 
   // Fill
-  ctx.lineTo(w, h);
-  ctx.lineTo(0, h);
-  ctx.closePath();
+  ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
   ctx.fillStyle = data[data.length - 1] >= 0 ? 'rgba(63,185,80,0.1)' : 'rgba(248,81,73,0.1)';
   ctx.fill();
 
   // Labels
-  ctx.fillStyle = 'var(--muted)';
+  ctx.fillStyle = '#8b949e';
   ctx.font = '10px monospace';
   ctx.fillText(`$${max.toFixed(0)}`, 4, 12);
-  ctx.fillText(`$${data[data.length-1].toFixed(0)}`, w - 50, h - pad - ((data[data.length-1] - min) / range) * (h - pad*2) - 4);
+  const lastY = h - pad - ((data[data.length-1] - min) / range) * (h - pad*2);
+  ctx.fillText(`$${data[data.length-1].toFixed(0)}`, w - 50, lastY - 4);
 }
 
+// ── Predictions ──────────────────────────────────────────────────
 async function refreshPredictions() {
   const d = await fetchJSON('/api/predictions');
   if (!d || d.error) return;
@@ -305,25 +668,26 @@ async function refreshPredictions() {
   $('pred-accuracy').className = 'value ' + (d.overall_accuracy >= 55 ? 'positive' : d.overall_accuracy >= 50 ? 'warning' : 'negative');
   $('pred-count').textContent = `${d.evaluated} / ${d.total_predictions}`;
 
-  // Per-instrument
   let instHtml = '';
   for (const [inst, s] of Object.entries(d.by_instrument || {})) {
     instHtml += `<div class="metric"><span class="label">${inst} (n=${s.evaluated})</span><span class="value ${s.accuracy >= 55 ? 'positive' : s.accuracy >= 50 ? 'warning' : 'negative'}">${s.accuracy}%</span></div>`;
   }
   $('pred-instruments').innerHTML = instHtml;
+  if($('pred-instruments2')) $('pred-instruments2').innerHTML = instHtml;
 
-  // Confidence bins
   let confHtml = '<div style="margin-top:4px;font-size:11px;color:var(--muted)">By confidence:</div>';
   for (const [bin, s] of Object.entries(d.by_confidence || {})) {
     confHtml += `<div class="metric"><span class="label">${bin} (n=${s.total})</span><span class="value ${s.accuracy >= 55 ? 'positive' : s.accuracy >= 50 ? 'warning' : 'negative'}">${s.accuracy}%</span></div>`;
   }
   $('pred-confidence').innerHTML = confHtml;
+  if($('pred-confidence2')) $('pred-confidence2').innerHTML = confHtml;
 }
 
+// ── Trades ───────────────────────────────────────────────────────
 async function refreshTrades() {
   const d = await fetchJSON('/api/trades/recent');
   if (!d || !Array.isArray(d) || d.length === 0) {
-    $('trades-body').innerHTML = '<tr><td colspan="9" style="color:var(--muted)">No trades</td></tr>';
+    $('trades-body').innerHTML = '<tr><td colspan="10" style="color:var(--muted)">No trades</td></tr>';
     return;
   }
   $('trades-body').innerHTML = d.map(t => {
@@ -340,10 +704,387 @@ async function refreshTrades() {
       <td class="${pnlClass(pnl)}">${pnl ? fmt(pnl) : '--'}</td>
       <td>${t.exit_reason || (t.execution_status === 'executed' ? 'open' : t.execution_status)}</td>
       <td>${dur}</td>
+      <td>${t.execution_status}</td>
     </tr>`;
   }).join('');
 }
 
+// ── Daily History ────────────────────────────────────────────────
+async function refreshDailyHistory() {
+  const d = await fetchJSON('/api/daily-history');
+  if (!d || !Array.isArray(d) || d.length === 0) return;
+  drawDailyChart(d);
+}
+
+function drawDailyChart(days) {
+  const canvas = $('daily-pnl-canvas');
+  if (!canvas || !days.length) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth;
+  const h = 180;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+
+  const pnls = days.map(d => d.pnl);
+  const actuals = days.map(d => d.actual_pnl);
+  const maxAbs = Math.max(1, ...pnls.map(Math.abs), ...actuals.filter(v => v != null).map(Math.abs));
+  const barW = Math.max(8, Math.min(40, (w - 60) / days.length - 4));
+  const startX = 50;
+  const midY = h / 2;
+  const scale = (midY - 20) / maxAbs;
+
+  // Zero line
+  ctx.strokeStyle = 'rgba(139,148,158,0.4)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(startX, midY); ctx.lineTo(w - 10, midY); ctx.stroke();
+
+  // Bars
+  days.forEach((day, i) => {
+    const x = startX + i * (barW + 4);
+    const barH = Math.abs(day.pnl) * scale;
+    const y = day.pnl >= 0 ? midY - barH : midY;
+
+    ctx.fillStyle = day.pnl >= 0 ? 'rgba(63,185,80,0.7)' : 'rgba(248,81,73,0.7)';
+    ctx.fillRect(x, y, barW, barH);
+
+    // Actual overlay
+    if (day.actual_pnl != null) {
+      const aH = Math.abs(day.actual_pnl) * scale;
+      const aY = day.actual_pnl >= 0 ? midY - aH : midY;
+      ctx.strokeStyle = 'var(--cyan)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x + 1, aY, barW - 2, aH);
+    }
+
+    // Date label
+    if (days.length <= 14 || i % Math.ceil(days.length / 10) === 0) {
+      ctx.fillStyle = '#8b949e';
+      ctx.font = '9px monospace';
+      ctx.save();
+      ctx.translate(x + barW/2, h - 2);
+      ctx.rotate(-0.5);
+      ctx.fillText(day.date.substring(5), 0, 0);
+      ctx.restore();
+    }
+
+    // P&L label on bar
+    if (barH > 14) {
+      ctx.fillStyle = '#c9d1d9';
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`$${day.pnl.toFixed(0)}`, x + barW/2, day.pnl >= 0 ? y - 3 : y + barH + 10);
+      ctx.textAlign = 'left';
+    }
+  });
+
+  // Y-axis labels
+  ctx.fillStyle = '#8b949e';
+  ctx.font = '10px monospace';
+  ctx.fillText(`$${maxAbs.toFixed(0)}`, 2, 15);
+  ctx.fillText(`-$${maxAbs.toFixed(0)}`, 2, h - 20);
+  ctx.fillText('$0', 2, midY + 4);
+
+  // Legend
+  ctx.fillStyle = 'rgba(63,185,80,0.7)';
+  ctx.fillRect(w - 120, 5, 10, 10);
+  ctx.fillStyle = '#8b949e';
+  ctx.fillText('Local', w - 106, 14);
+  ctx.strokeStyle = 'var(--cyan)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(w - 120, 20, 10, 10);
+  ctx.fillStyle = '#8b949e';
+  ctx.fillText('Broker', w - 106, 29);
+}
+
+// ── Instruments ──────────────────────────────────────────────────
+async function refreshInstruments() {
+  const d = await fetchJSON('/api/instruments');
+  if (!d || !Array.isArray(d)) return;
+
+  const renderTable = (targetId, full) => {
+    if (!$(targetId)) return;
+    if (!d.length) {
+      $(targetId).innerHTML = '<tr><td colspan="7" style="color:var(--muted)">No data</td></tr>';
+      return;
+    }
+    $(targetId).innerHTML = d.map(inst => {
+      if (full) {
+        return `<tr>
+          <td><strong>${inst.instrument}</strong></td>
+          <td>${inst.trades}</td>
+          <td>${inst.wins}</td>
+          <td class="${inst.win_rate >= 60 ? 'positive' : inst.win_rate >= 50 ? 'warning' : 'negative'}">${inst.win_rate}%</td>
+          <td class="${pnlClass(inst.pnl)}">${fmt(inst.pnl)}</td>
+          <td>${fmt(inst.avg_pnl)}</td>
+          <td>${inst.longs}L / ${inst.shorts}S</td>
+        </tr>`;
+      }
+      return `<tr>
+        <td><strong>${inst.instrument}</strong></td>
+        <td>${inst.trades}</td>
+        <td class="${inst.win_rate >= 60 ? 'positive' : inst.win_rate >= 50 ? 'warning' : 'negative'}">${inst.win_rate}%</td>
+        <td class="${pnlClass(inst.pnl)}">${fmt(inst.pnl)}</td>
+        <td>${fmt(inst.avg_pnl)}</td>
+      </tr>`;
+    }).join('');
+  };
+
+  renderTable('inst-body', false);
+  renderTable('inst-body2', true);
+}
+
+// ── Reports ──────────────────────────────────────────────────────
+async function submitSnapshot() {
+  const data = {
+    report_date: $('snap-date').value,
+    actual_balance: parseFloat($('snap-balance').value) || null,
+    actual_pnl_today: parseFloat($('snap-pnl-today').value) || null,
+    actual_total_pnl: parseFloat($('snap-total-pnl').value) || null,
+    actual_trades_today: parseInt($('snap-trades').value) || null,
+    commissions: parseFloat($('snap-comm').value) || 0,
+    notes: $('snap-notes').value,
+  };
+
+  if (!data.report_date) {
+    $('snapshot-alert').innerHTML = '<div class="alert alert-error">Please enter a date</div>';
+    return;
+  }
+
+  try {
+    const r = await fetch('/api/reports/snapshot', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data),
+    });
+    const result = await r.json();
+    if (result.status === 'ok') {
+      $('snapshot-alert').innerHTML = `<div class="alert alert-success">Report saved for ${result.date}</div>`;
+      refreshSnapshots();
+      // Clear form
+      $('snap-balance').value = '';
+      $('snap-pnl-today').value = '';
+      $('snap-total-pnl').value = '';
+      $('snap-trades').value = '';
+      $('snap-comm').value = '';
+      $('snap-notes').value = '';
+    } else {
+      $('snapshot-alert').innerHTML = `<div class="alert alert-error">${result.error}</div>`;
+    }
+  } catch(e) {
+    $('snapshot-alert').innerHTML = `<div class="alert alert-error">Error: ${e.message}</div>`;
+  }
+}
+
+function handleFileSelect(input) {
+  if (input.files.length) {
+    $('file-name').textContent = input.files[0].name;
+  }
+}
+
+async function uploadCSV() {
+  const file = $('csv-file').files[0];
+  if (!file) {
+    $('csv-alert').innerHTML = '<div class="alert alert-error">Please select a CSV file</div>';
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('report_date', $('csv-date').value);
+
+  try {
+    const r = await fetch('/api/reports/upload-csv', {
+      method: 'POST',
+      body: formData,
+    });
+    const result = await r.json();
+    if (result.status === 'ok') {
+      $('csv-alert').innerHTML = `<div class="alert alert-success">Imported ${result.imported} trades for ${result.date}</div>`;
+      $('file-name').textContent = 'No file selected';
+      $('csv-file').value = '';
+    } else {
+      $('csv-alert').innerHTML = `<div class="alert alert-error">${result.error}</div>`;
+    }
+  } catch(e) {
+    $('csv-alert').innerHTML = `<div class="alert alert-error">Error: ${e.message}</div>`;
+  }
+}
+
+async function refreshSnapshots() {
+  const d = await fetchJSON('/api/reports/snapshots');
+  if (!d || !Array.isArray(d)) return;
+  if (!d.length) {
+    $('snapshots-body').innerHTML = '<tr><td colspan="9" style="color:var(--muted)">No reports submitted yet</td></tr>';
+    return;
+  }
+  $('snapshots-body').innerHTML = d.map(s => `<tr>
+    <td><strong>${s.report_date}</strong></td>
+    <td>${s.actual_balance != null ? fmt(s.actual_balance) : '--'}</td>
+    <td class="${pnlClass(s.actual_pnl_today || 0)}">${s.actual_pnl_today != null ? fmt(s.actual_pnl_today) : '--'}</td>
+    <td class="${pnlClass(s.actual_total_pnl || 0)}">${s.actual_total_pnl != null ? fmt(s.actual_total_pnl) : '--'}</td>
+    <td>${s.actual_trades_today || '--'}</td>
+    <td>${s.commissions ? fmt(s.commissions) : '--'}</td>
+    <td style="color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;">${s.notes || ''}</td>
+    <td style="font-size:11px;color:var(--muted)">${s.created_at || ''}</td>
+    <td><button class="btn btn-danger btn-sm" onclick="deleteSnapshot(${s.id})">Del</button></td>
+  </tr>`).join('');
+}
+
+async function deleteSnapshot(id) {
+  if (!confirm('Delete this report?')) return;
+  await fetch(`/api/reports/snapshot/${id}`, { method: 'DELETE' });
+  refreshSnapshots();
+}
+
+// ── Reconciliation ───────────────────────────────────────────────
+async function refreshReconciliation() {
+  const d = await fetchJSON('/api/reconciliation');
+  if (!d) return;
+
+  const s = d.summary || {};
+  $('recon-local-pnl').textContent = fmt(s.total_local_pnl || 0);
+  $('recon-local-pnl').className = 'value ' + pnlClass(s.total_local_pnl || 0);
+  $('recon-actual-pnl').textContent = s.days_with_actuals > 0 ? fmt(s.total_actual_pnl || 0) : 'No data';
+  $('recon-actual-pnl').className = 'value ' + (s.days_with_actuals > 0 ? pnlClass(s.total_actual_pnl || 0) : 'neutral');
+  $('recon-delta').textContent = s.days_with_actuals > 0 ? fmt(s.total_delta || 0) : '--';
+  $('recon-delta').className = 'value ' + (s.total_delta > 10 ? 'warning' : s.total_delta < -10 ? 'warning' : 'positive');
+  $('recon-days').textContent = `${s.days_with_actuals || 0} / ${s.days_total || 0}`;
+
+  // Quality
+  const coverage = s.days_total > 0 ? (s.days_with_actuals / s.days_total * 100).toFixed(0) : 0;
+  let qualityHtml = `<div class="metric"><span class="label">Report Coverage</span><span class="value ${coverage >= 80 ? 'positive' : coverage >= 50 ? 'warning' : 'negative'}">${coverage}%</span></div>`;
+  if (s.days_with_actuals === 0) {
+    qualityHtml += '<div style="margin-top:8px;padding:8px;background:rgba(210,153,34,0.1);border:1px solid rgba(210,153,34,0.3);border-radius:6px;font-size:11px;color:var(--yellow)">No broker reports uploaded yet. Go to the Reports tab to submit daily snapshots from Tradovate.</div>';
+  } else if (Math.abs(s.total_delta || 0) > 50) {
+    qualityHtml += `<div style="margin-top:8px;padding:8px;background:rgba(248,81,73,0.1);border:1px solid rgba(248,81,73,0.3);border-radius:6px;font-size:11px;color:var(--red)">Significant P&L discrepancy: ${fmt(s.total_delta)}. Check for missed fills, slippage, or ghost positions.</div>`;
+  } else if (s.days_with_actuals > 0) {
+    qualityHtml += '<div style="margin-top:8px;padding:8px;background:rgba(63,185,80,0.1);border:1px solid rgba(63,185,80,0.3);border-radius:6px;font-size:11px;color:var(--green)">P&L tracking looks good. Keep uploading daily reports.</div>';
+  }
+  $('recon-quality').innerHTML = qualityHtml;
+
+  // Day table
+  const days = d.days || [];
+  if (!days.length) {
+    $('recon-body').innerHTML = '<tr><td colspan="8" style="color:var(--muted)">No data</td></tr>';
+    return;
+  }
+  $('recon-body').innerHTML = days.map(day => {
+    const deltaClass = day.delta == null ? 'neutral' : (Math.abs(day.delta) > 20 ? 'warning' : 'positive');
+    return `<tr>
+      <td><strong>${day.date}</strong></td>
+      <td>${day.local_trades}</td>
+      <td class="${pnlClass(day.local_pnl)}">${fmt(day.local_pnl)}</td>
+      <td>${day.actual_trades != null ? day.actual_trades : '--'}</td>
+      <td class="${day.actual_pnl != null ? pnlClass(day.actual_pnl) : 'neutral'}">${day.actual_pnl != null ? fmt(day.actual_pnl) : '--'}</td>
+      <td>${day.actual_balance != null ? fmt(day.actual_balance) : '--'}</td>
+      <td>${day.commissions != null ? fmt(day.commissions) : '--'}</td>
+      <td class="${deltaClass}">${day.delta != null ? fmt(day.delta) : '--'}</td>
+    </tr>`;
+  }).join('');
+
+  // Recon chart
+  drawReconChart(days);
+}
+
+function drawReconChart(days) {
+  const canvas = $('recon-canvas');
+  if (!canvas || !days.length) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth;
+  const h = 180;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+
+  // Cumulative local and actual
+  let cumLocal = 0, cumActual = 0;
+  const localPts = [];
+  const actualPts = [];
+  let hasActual = false;
+
+  days.forEach(day => {
+    cumLocal += day.local_pnl || 0;
+    localPts.push(cumLocal);
+    if (day.actual_pnl != null) {
+      cumActual += day.actual_pnl;
+      actualPts.push(cumActual);
+      hasActual = true;
+    } else {
+      actualPts.push(null);
+    }
+  });
+
+  const allVals = [...localPts, ...actualPts.filter(v => v != null)];
+  const min = Math.min(0, ...allVals);
+  const max = Math.max(...allVals);
+  const range = max - min || 1;
+  const pad = 20;
+  const plotW = w - 60;
+  const plotH = h - pad * 2;
+
+  const toX = i => 50 + (i / (days.length - 1 || 1)) * plotW;
+  const toY = v => pad + plotH - ((v - min) / range) * plotH;
+
+  // Zero line
+  ctx.strokeStyle = 'rgba(139,148,158,0.3)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4,4]);
+  ctx.beginPath(); ctx.moveTo(50, toY(0)); ctx.lineTo(w - 10, toY(0)); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Local line
+  ctx.strokeStyle = '#3fb950';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  localPts.forEach((v, i) => { i === 0 ? ctx.moveTo(toX(i), toY(v)) : ctx.lineTo(toX(i), toY(v)); });
+  ctx.stroke();
+
+  // Actual line
+  if (hasActual) {
+    ctx.strokeStyle = '#39d5ff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    let started = false;
+    actualPts.forEach((v, i) => {
+      if (v == null) return;
+      if (!started) { ctx.moveTo(toX(i), toY(v)); started = true; }
+      else ctx.lineTo(toX(i), toY(v));
+    });
+    ctx.stroke();
+
+    // Dots on actual
+    actualPts.forEach((v, i) => {
+      if (v == null) return;
+      ctx.fillStyle = '#39d5ff';
+      ctx.beginPath();
+      ctx.arc(toX(i), toY(v), 3, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  // Labels
+  ctx.fillStyle = '#8b949e';
+  ctx.font = '10px monospace';
+  ctx.fillText(`$${max.toFixed(0)}`, 2, pad + 4);
+  ctx.fillText(`$${min.toFixed(0)}`, 2, h - pad + 4);
+
+  // Legend
+  ctx.fillStyle = '#3fb950';
+  ctx.fillRect(w - 130, 5, 20, 3);
+  ctx.fillStyle = '#8b949e';
+  ctx.fillText('Local', w - 105, 10);
+  ctx.fillStyle = '#39d5ff';
+  ctx.fillRect(w - 130, 18, 20, 3);
+  ctx.fillStyle = '#8b949e';
+  ctx.fillText('Broker', w - 105, 23);
+}
+
+// ── Main Refresh ─────────────────────────────────────────────────
 async function refreshAll() {
   await Promise.all([
     refreshStatus(),
@@ -352,6 +1093,8 @@ async function refreshAll() {
     refreshPerformance(),
     refreshPredictions(),
     refreshTrades(),
+    refreshInstruments(),
+    refreshDailyHistory(),
   ]);
 }
 
