@@ -26,6 +26,7 @@ from signals.generator import SignalGenerator
 from signals.shot_classifier import nearest_tier_above
 from signals.confidence import score_confidence
 from risk.manager import RiskManager
+from risk.apex_compliance import ApexCompliance
 from execution.order_manager import OrderManager, Position
 from monitoring import dashboard
 from monitoring.logger import setup_logging
@@ -63,6 +64,7 @@ class TradingSystem:
         self.model = LaTPFNPredictor(config)
         self.signal_gen = SignalGenerator(config)
         self.risk_mgr = RiskManager(config)
+        self.apex = ApexCompliance(config)
         self.executor = _create_executor(config)
         self.order_mgr = OrderManager()
 
@@ -72,6 +74,12 @@ class TradingSystem:
             "default_equity", 50000
         )
         self.is_running = False
+
+        # Confirmation mode: require Discord approval before executing
+        # Required for PA/Live accounts per Apex rules
+        self.confirmation_mode = config.get("execution", {}).get(
+            "confirmation_mode", False
+        )
 
         # Contract symbol cache (root → active contract)
         self._contract_cache: dict[str, str] = {}
@@ -127,6 +135,26 @@ class TradingSystem:
         while self.is_running:
             if not self._is_market_hours():
                 logger.debug("Outside market hours, sleeping 60s")
+                await asyncio.sleep(60)
+                continue
+
+            # Apex hard flatten at 4:55 PM ET
+            if self.apex.should_flatten_now():
+                if self.order_mgr.open_count > 0:
+                    logger.warning("APEX FLATTEN: 4:55 PM ET — closing all positions")
+                    if self.executor:
+                        try:
+                            await self.executor.flatten_position()
+                        except Exception as e:
+                            logger.error("Flatten failed: %s", e)
+                    self.order_mgr.close_all()
+                    if self.discord_bot:
+                        try:
+                            await self.discord_bot._signal_channel.send(
+                                "@here **APEX AUTO-FLATTEN** — All positions closed (4:55 PM ET cutoff)"
+                            )
+                        except Exception:
+                            pass
                 await asyncio.sleep(60)
                 continue
 
@@ -230,12 +258,50 @@ class TradingSystem:
                     pass
             return prediction
 
-        # Notify Discord of approved signal
-        if self.discord_bot:
-            try:
-                await self.discord_bot.post_signal(instrument, signal, prediction)
-            except Exception:
-                pass
+        # 5b. Apex compliance checks (5:1 R:R, MAE, correlated instruments, time)
+        inst_cfg = self.config["instruments"][instrument]
+        apex_ok, apex_reason = self.apex.check_all(
+            instrument=instrument,
+            direction=signal.direction,
+            entry_price=signal.entry_price,
+            stop_price=signal.stop_loss,
+            target_price=signal.take_profit,
+            position_size=signal.position_size,
+            contract_size=inst_cfg["contract_size"],
+            open_positions=self.order_mgr.open_positions,
+        )
+        if not apex_ok:
+            logger.warning("APEX COMPLIANCE BLOCK %s: %s", instrument, apex_reason)
+            dashboard.print_risk_decision(instrument, False, apex_reason)
+            if self.discord_bot:
+                try:
+                    await self.discord_bot.post_risk_rejection(instrument, f"[APEX] {apex_reason}")
+                except Exception:
+                    pass
+            return prediction
+
+        # 5c. Confirmation mode — require Discord approval (PA/Live accounts)
+        if self.confirmation_mode and self.discord_bot and self.discord_bot._signal_channel:
+            from discord_bot.confirmation import request_confirmation
+            timeout = self.config.get("execution", {}).get("confirmation_timeout", 60)
+            confirmed = await request_confirmation(
+                channel=self.discord_bot._signal_channel,
+                instrument=instrument,
+                signal=signal,
+                prediction=prediction,
+                timeout_seconds=timeout,
+                alert_role_id=self.discord_bot.alert_role_id or None,
+            )
+            if not confirmed:
+                logger.info("%s: trade not confirmed via Discord", instrument)
+                return prediction
+        else:
+            # Auto-execution mode — still notify Discord of the signal
+            if self.discord_bot:
+                try:
+                    await self.discord_bot.post_signal(instrument, signal, prediction)
+                except Exception:
+                    pass
 
         # 6. Execute (if executor is available)
         if not self.executor:

@@ -90,8 +90,13 @@ risk:
 
   prop_firm:
     max_daily_loss_usd: 1000     # Adjust to your prop firm rules
-    max_total_drawdown_usd: 2000
+    max_total_drawdown_usd: 2500 # $50k account trailing drawdown
     flatten_eod: true
+    flatten_time: "16:55"        # Hard flatten at 4:55 PM ET (4min before 4:59 deadline)
+    no_new_trades_after: "16:45" # Stop opening positions after 4:45 PM ET
+    max_risk_reward_ratio: 5.0   # Apex 5:1 max risk-to-reward
+    mae_pct: 0.30                # 30% MAE rule — max unrealized loss per trade
+    consistency_pct: 0.30        # 30% consistency rule — max single day as % of total
 
 signal:
   min_confidence: 0.25   # absolute floor (below this = no trade regardless of tier)
@@ -173,6 +178,11 @@ shot_tiers:
 execution:
   mode: pickmytrade    # pickmytrade | tradovate | dry_run
   default_equity: 50000  # used when broker can't report balance
+  # Confirmation mode: require Discord approval before each trade
+  # SET TO true FOR PA/LIVE ACCOUNTS (Apex requires human oversight)
+  # Set to false for evaluation accounts (automation more permissive)
+  confirmation_mode: false   # false=auto-execute, true=require Discord approval
+  confirmation_timeout: 60   # seconds to wait for approval before auto-rejecting
 
 pickmytrade:
   webhook_url: "https://api.pickmytrade.trade/v2/add-trade-data-latest"
