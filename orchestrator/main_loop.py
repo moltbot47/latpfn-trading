@@ -34,6 +34,8 @@ from monitoring import dashboard
 from monitoring.logger import setup_logging
 from monitoring.trade_logger import TradeLogger
 from monitoring.position_monitor import check_position_exits
+from signals.signal_ranker import rank_signals
+from monitoring.profit_manager import check_profit_actions
 
 logger = logging.getLogger(__name__)
 
@@ -197,14 +199,123 @@ class TradingSystem:
                 ),
             )
 
+            # ── Phase 1: Scan all instruments for candidate signals ──
+            candidates = []
             for instrument in self.instruments:
                 try:
-                    pred = await self._process_instrument(instrument)
+                    pred, candidate = await self._scan_instrument(instrument)
                     predictions[instrument] = pred
+                    if candidate is not None:
+                        candidates.append(candidate)
                 except Exception as e:
-                    logger.error("Error processing %s: %s", instrument, e, exc_info=True)
+                    logger.error("Error scanning %s: %s", instrument, e, exc_info=True)
                     predictions[instrument] = None
 
+            # ── Phase 2: Rank candidates and execute the best ones ──
+            max_pos = self.config["risk"].get("max_concurrent_positions", 6)
+            available_slots = max_pos - self.order_mgr.open_count
+            ranked = []
+            if candidates and available_slots > 0:
+                ranked = rank_signals(
+                    candidates=candidates,
+                    open_positions=self.order_mgr.open_positions,
+                    available_slots=available_slots,
+                )
+                for cand in ranked:
+                    try:
+                        await self._execute_signal(
+                            instrument=cand["instrument"],
+                            signal=cand["signal"],
+                            prediction=cand["prediction"],
+                            pred_id=cand["pred_id"],
+                        )
+                    except Exception as e:
+                        logger.error(
+                            "Error executing %s: %s", cand["instrument"], e, exc_info=True
+                        )
+            elif candidates:
+                logger.info(
+                    "All %d position slots full — %d candidate signals skipped",
+                    max_pos, len(candidates),
+                )
+
+            # ── Phase 3a: Auto profit-taking on open positions ──
+            # Uses yfinance delayed data (~10-15 min). Closes at 90%+ TP,
+            # notifies at 75%+ TP to tighten stop (can't modify via webhook).
+            if self.order_mgr.open_count > 0:
+                try:
+                    # Build pending signals list for slot-freeing logic
+                    ranked_insts = {c["instrument"] for c in ranked}
+                    overflow = [c for c in candidates if c["instrument"] not in ranked_insts]
+                    pending_for_slots = [
+                        {"instrument": c["instrument"], "composite_score": c.get("rank_score", 0)}
+                        for c in overflow
+                    ] if overflow else None
+
+                    profit_actions = check_profit_actions(
+                        open_positions=self.order_mgr.open_positions,
+                        instruments_config=self.config["instruments"],
+                        pending_signals=pending_for_slots,
+                    )
+                    for pa in profit_actions:
+                        inst = pa["instrument"]
+                        inst_cfg = self.config["instruments"].get(inst, {})
+                        cs = inst_cfg.get("contract_size", 1.0)
+
+                        if pa["action"] == "close":
+                            # Close via webhook + track locally
+                            if self.executor:
+                                exec_sym = self._contract_cache.get(inst, inst_cfg.get("tradovate_symbol", inst))
+                                await self.executor.close_position(exec_sym)
+
+                            pnl = self.order_mgr.close_position(
+                                instrument=inst,
+                                exit_price=pa["current_price"],
+                                contract_size=cs,
+                                exit_reason="auto_profit",
+                            )
+                            self.apex.update_balance(self.account_equity + pnl)
+                            logger.info(
+                                "AUTO PROFIT-TAKE %s @ %.2f  Est P&L: $%.2f  (%s)",
+                                inst, pa["current_price"], pnl, pa["reason"],
+                            )
+                            if self.discord_bot:
+                                try:
+                                    await self.discord_bot._signal_channel.send(
+                                        f"\U0001F4B0 **AUTO PROFIT-TAKE** {inst} "
+                                        f"@ {pa['current_price']:.2f}  |  "
+                                        f"Est. P&L: ${pnl:+.2f}\n"
+                                        f"*{pa['reason']}*"
+                                    )
+                                except Exception:
+                                    pass
+
+                        elif pa["action"] == "tighten_stop":
+                            # Can't modify stops via PickMyTrade webhook —
+                            # notify user and update local tracking only
+                            pos = self.order_mgr.open_positions.get(inst)
+                            if pos:
+                                pos.stop_loss = pos.entry_price  # breakeven locally
+                                self.order_mgr._save_state()
+                            logger.info(
+                                "TIGHTEN STOP %s → breakeven %.2f  (%s)",
+                                inst, pa["current_price"], pa["reason"],
+                            )
+                            if self.discord_bot:
+                                try:
+                                    await self.discord_bot._signal_channel.send(
+                                        f"\U0001F6E1 **TIGHTEN STOP** {inst} "
+                                        f"→ Move stop to breakeven\n"
+                                        f"*{pa['reason']}*\n"
+                                        f"\u26A0\uFE0F *Manual action needed — "
+                                        f"PickMyTrade cannot modify existing stops.*"
+                                    )
+                                except Exception:
+                                    pass
+                except Exception as e:
+                    logger.error("Profit-taking check failed: %s", e)
+
+            # ── Phase 3b: Check open positions for inferred exits ──
             # Check open positions for inferred exits (price-based estimation)
             # NOTE: Only monitors executed positions — see position_monitor.py
             # for full accuracy disclaimers. Results are estimates, not confirmed fills.
@@ -275,21 +386,27 @@ class TradingSystem:
             logger.info("Next cycle in %d minutes", self.interval)
             await asyncio.sleep(self.interval * 60)
 
-    async def _process_instrument(self, instrument: str) -> dict | None:
-        """Full pipeline for one instrument."""
-        # 1. Skip if we already have a position
+    async def _scan_instrument(self, instrument: str) -> tuple:
+        """
+        Scan one instrument: fetch data, predict, generate signal.
+
+        Returns:
+            (prediction_dict_or_None, candidate_dict_or_None)
+            candidate is non-None only if a valid signal was generated.
+        """
+        # Skip if we already have a position
         if self.order_mgr.has_position(instrument):
             logger.info("%s: position already open, skipping", instrument)
-            return None
+            return None, None
 
-        # 2. Fetch data
+        # Fetch data
         data = self.data_pipeline.get_prediction_data(instrument)
 
         if len(data["heldout_df"]) < data["n_history"] + data["n_prompt"]:
             logger.warning("%s: insufficient data, skipping", instrument)
-            return None
+            return None, None
 
-        # 3. Predict
+        # Predict
         prediction = self.model.predict(
             heldout_df=data["heldout_df"],
             context_dfs=data["context_dfs"],
@@ -301,7 +418,7 @@ class TradingSystem:
             prediction["confidence"], prediction["regime"],
         )
 
-        # 3b. Market-based regime detection (uses observed data, not forecast shape)
+        # Market-based regime detection
         vix_df = data["context_dfs"].get("^VIX")
         market_regime = detect_regime(data["heldout_df"], vix_df)
         prediction["market_regime"] = market_regime
@@ -313,19 +430,16 @@ class TradingSystem:
             market_regime["size_multiplier"],
         )
 
-        # 4. Generate signal (includes NBA shot-tier classification)
+        # Generate signal (includes NBA shot-tier classification)
         signal = self.signal_gen.generate(instrument, prediction)
         dashboard.print_signal(instrument, signal)
 
-        # Attach market-based regime size multiplier to signal
+        # Attach market-based regime size multiplier
         if signal is not None:
             signal.regime_size_mult = market_regime["size_multiplier"]
 
-        # Annotate prediction with shot type for dashboard display
-        if signal is not None:
-            prediction["shot_type"] = signal.shot_type
-        else:
-            prediction["shot_type"] = ""
+        # Annotate prediction with shot type for dashboard
+        prediction["shot_type"] = signal.shot_type if signal else ""
 
         # Log prediction to SQLite
         pred_id = self.trade_logger.log_prediction(
@@ -338,9 +452,27 @@ class TradingSystem:
         )
 
         if signal is None:
-            return prediction
+            return prediction, None
 
-        # 5. Risk validation (pass open_positions_dict for portfolio risk cap)
+        # Return as a candidate for ranking
+        candidate = {
+            "instrument": instrument,
+            "signal": signal,
+            "prediction": prediction,
+            "market_regime": market_regime,
+            "pred_id": pred_id,
+        }
+        return prediction, candidate
+
+    async def _execute_signal(
+        self, instrument: str, signal, prediction: dict, pred_id
+    ):
+        """
+        Validate and execute a ranked signal.
+
+        Called only for signals that passed ranking and have an available slot.
+        """
+        # Risk validation
         approved, signal, reason = self.risk_mgr.validate(
             signal,
             self.order_mgr.open_count,
@@ -349,7 +481,6 @@ class TradingSystem:
         dashboard.print_risk_decision(instrument, approved, reason)
 
         if not approved or signal is None:
-            # Log rejected trade
             if signal is not None:
                 dd_status_now = self.apex.get_drawdown_status(self.account_equity)
                 self.trade_logger.log_trade(
@@ -362,15 +493,14 @@ class TradingSystem:
                     execution_status="rejected",
                     rejection_reason=reason,
                 )
-            # Notify Discord of rejection
             if self.discord_bot and signal is not None:
                 try:
                     await self.discord_bot.post_risk_rejection(instrument, reason)
                 except Exception:
                     pass
-            return prediction
+            return
 
-        # 5b. Apex compliance checks (5:1 R:R, MAE, correlated instruments, time)
+        # Apex compliance
         inst_cfg = self.config["instruments"][instrument]
         apex_ok, apex_reason = self.apex.check_all(
             instrument=instrument,
@@ -390,11 +520,11 @@ class TradingSystem:
                     await self.discord_bot.post_risk_rejection(instrument, f"[APEX] {apex_reason}")
                 except Exception:
                     pass
-            return prediction
+            return
 
-        # 5c. Portfolio exposure check (correlation-adjusted MES-equivalent limits)
-        max_net = self.config.get("risk", {}).get("max_net_mes_equivalent", 3.0)
-        max_gross = self.config.get("risk", {}).get("max_gross_mes_equivalent", 5.0)
+        # Portfolio exposure check
+        max_net = self.config.get("risk", {}).get("max_net_mes_equivalent", 6.0)
+        max_gross = self.config.get("risk", {}).get("max_gross_mes_equivalent", 10.0)
         exp_ok, exp_reason = check_exposure_limit(
             open_positions=self.order_mgr.open_positions,
             instruments_config=self.config["instruments"],
@@ -412,9 +542,9 @@ class TradingSystem:
                     await self.discord_bot.post_risk_rejection(instrument, f"[EXPOSURE] {exp_reason}")
                 except Exception:
                     pass
-            return prediction
+            return
 
-        # 5d. Confirmation mode — require Discord approval (PA/Live accounts)
+        # Confirmation mode (PA/Live accounts)
         if self.confirmation_mode and self.discord_bot and self.discord_bot._signal_channel:
             from discord_bot.confirmation import request_confirmation
             timeout = self.config.get("execution", {}).get("confirmation_timeout", 60)
@@ -428,16 +558,15 @@ class TradingSystem:
             )
             if not confirmed:
                 logger.info("%s: trade not confirmed via Discord", instrument)
-                return prediction
+                return
         else:
-            # Auto-execution mode — still notify Discord of the signal
             if self.discord_bot:
                 try:
                     await self.discord_bot.post_signal(instrument, signal, prediction)
                 except Exception:
                     pass
 
-        # 6. Execute (if executor is available)
+        # Execute
         if not self.executor:
             logger.info("%s: signal approved but no executor (dry_run)", instrument)
             dd_status_now = self.apex.get_drawdown_status(self.account_equity)
@@ -457,9 +586,8 @@ class TradingSystem:
                 effective_risk_pct=eff_risk_pct,
                 execution_status="dry_run",
             )
-            return prediction
+            return
 
-        # Resolve symbol: use contract cache if available, else root symbol
         exec_symbol = self._contract_cache.get(
             instrument,
             self.config["instruments"][instrument]["tradovate_symbol"],
@@ -476,14 +604,13 @@ class TradingSystem:
 
         dashboard.print_order_result(instrument, result)
 
-        # Notify Discord of execution result
         if self.discord_bot:
             try:
                 await self.discord_bot.post_execution(instrument, result, signal)
             except Exception:
                 pass
 
-        # Log executed trade
+        # Log trade
         dd_status_now = self.apex.get_drawdown_status(self.account_equity)
         inst_cfg_log = self.config["instruments"][instrument]
         risk_pts = abs(signal.entry_price - signal.stop_loss)
@@ -514,8 +641,6 @@ class TradingSystem:
                 order_id=result["orderId"],
                 trade_log_id=trade_log_id,
             ))
-
-        return prediction
 
     def _build_radar(self, predictions: dict) -> list:
         """

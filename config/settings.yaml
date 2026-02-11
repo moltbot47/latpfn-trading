@@ -113,53 +113,101 @@ instruments:
   #     - "UUP"
   #     - "^VIX"
 
-  # ── POST-EVAL DIVERSIFICATION ──────────────────────────────────
-  # Uncomment MCL and M6E AFTER passing the Apex eval to add
-  # uncorrelated asset classes (oil, currencies) for diversification.
-  # Also add MCL and M6E symbol mappings in the PickMyTrade dashboard.
+  # ── DIVERSIFICATION — OIL & FX ───────────────────────────────
+  # Uncorrelated asset classes for portfolio diversification.
+  # Remember to add MCL and M6E symbol mappings in PickMyTrade dashboard.
 
-  # MCL: DISABLED — Enable after passing eval for oil diversification
-  # MCL:
-  #   name: "Micro WTI Crude Oil Futures"
-  #   yfinance_ticker: "CL=F"
-  #   tradovate_symbol: "MCL"
-  #   contract_size: 100       # $100 per point (100 barrels × $1/barrel)
-  #   tick_size: 0.01
-  #   tick_value: 1.00
-  #   context_assets:
-  #     - "USO"    # United States Oil Fund
-  #     - "XLE"    # Energy Select Sector
-  #     - "^VIX"   # Volatility Index
-  #     - "DX-Y.NYB"  # Dollar Index (oil inversely correlated)
-  #     - "^TNX"   # 10-Year Treasury Yield
-  #     - "XOP"    # Oil & Gas Exploration ETF
-  #     - "SPY"    # S&P 500 (macro sentiment)
-  #     - "UNG"    # Natural Gas ETF (energy sector)
+  MCL:
+    name: "Micro WTI Crude Oil Futures"
+    yfinance_ticker: "CL=F"
+    tradovate_symbol: "MCL"
+    contract_size: 100       # $100 per point (100 barrels × $1/barrel)
+    tick_size: 0.01
+    tick_value: 1.00
+    context_assets:
+      - "USO"    # United States Oil Fund
+      - "XLE"    # Energy Select Sector
+      - "^VIX"   # Volatility Index
+      - "DX-Y.NYB"  # Dollar Index (oil inversely correlated)
+      - "^TNX"   # 10-Year Treasury Yield
+      - "XOP"    # Oil & Gas Exploration ETF
+      - "SPY"    # S&P 500 (macro sentiment)
+      - "UNG"    # Natural Gas ETF (energy sector)
 
-  # M6E: DISABLED — Enable after passing eval for FX diversification
-  # M6E:
-  #   name: "Micro EUR/USD Futures"
-  #   yfinance_ticker: "EURUSD=X"
-  #   tradovate_symbol: "M6E"
-  #   contract_size: 12500     # $12,500 notional (12,500 euros × rate)
-  #   tick_size: 0.0001
-  #   tick_value: 1.25
-  #   context_assets:
-  #     - "FXE"    # Euro Currency ETF
-  #     - "DX-Y.NYB"  # Dollar Index (directly inverse)
-  #     - "^VIX"   # Volatility Index
-  #     - "^TNX"   # 10-Year Treasury (rate differentials)
-  #     - "EWG"    # Germany ETF (Eurozone proxy)
-  #     - "UUP"    # Dollar Bullish ETF
-  #     - "GLD"    # Gold (often moves with EUR vs USD)
-  #     - "SPY"    # S&P 500 (risk sentiment)
+  M6E:
+    name: "Micro EUR/USD Futures"
+    yfinance_ticker: "EURUSD=X"
+    tradovate_symbol: "M6E"
+    contract_size: 12500     # $12,500 notional (12,500 euros × rate)
+    tick_size: 0.0001
+    tick_value: 1.25
+    context_assets:
+      - "FXE"    # Euro Currency ETF
+      - "DX-Y.NYB"  # Dollar Index (directly inverse)
+      - "^VIX"   # Volatility Index
+      - "^TNX"   # 10-Year Treasury (rate differentials)
+      - "EWG"    # Germany ETF (Eurozone proxy)
+      - "UUP"    # Dollar Bullish ETF
+      - "GLD"    # Gold (often moves with EUR vs USD)
+      - "SPY"    # S&P 500 (risk sentiment)
+
+  M6B:
+    name: "Micro GBP/USD Futures"
+    yfinance_ticker: "GBPUSD=X"
+    tradovate_symbol: "M6B"
+    contract_size: 6250      # $6,250 notional (6,250 GBP × rate)
+    tick_size: 0.0001
+    tick_value: 0.625
+    context_assets:
+      - "FXB"    # British Pound ETF
+      - "DX-Y.NYB"  # Dollar Index
+      - "^VIX"   # Volatility Index
+      - "^TNX"   # 10-Year Treasury
+      - "EWU"    # UK ETF
+      - "UUP"    # Dollar Bullish ETF
+      - "GLD"    # Gold
+      - "SPY"    # S&P 500
+
+  M6A:
+    name: "Micro AUD/USD Futures"
+    yfinance_ticker: "AUDUSD=X"
+    tradovate_symbol: "M6A"
+    contract_size: 10000     # $10,000 notional (10,000 AUD × rate)
+    tick_size: 0.0001
+    tick_value: 1.00
+    context_assets:
+      - "FXA"    # Australian Dollar ETF
+      - "DX-Y.NYB"  # Dollar Index
+      - "^VIX"   # Volatility Index
+      - "^TNX"   # 10-Year Treasury
+      - "EWA"    # Australia ETF
+      - "USO"    # Oil (AUD correlates with commodities)
+      - "GLD"    # Gold (Australia is major gold exporter)
+      - "SPY"    # S&P 500
+
+  M6J:
+    name: "Micro JPY/USD Futures"
+    yfinance_ticker: "JPYUSD=X"
+    tradovate_symbol: "M6J"
+    contract_size: 1250000   # ¥1,250,000 notional
+    tick_size: 0.0000005
+    tick_value: 0.625
+    context_assets:
+      - "FXY"    # Japanese Yen ETF
+      - "DX-Y.NYB"  # Dollar Index
+      - "^VIX"   # Volatility Index
+      - "^TNX"   # 10-Year Treasury
+      - "EWJ"    # Japan ETF
+      - "UUP"    # Dollar Bullish ETF
+      - "GLD"    # Gold (safe haven correlation)
+      - "SPY"    # S&P 500
 
 risk:
   max_risk_per_trade_pct: 2.0    # 2% of account equity ($1000 on $50k)
   max_position_size_contracts: 5   # micros are 1/10th size, can safely trade more
   max_daily_loss_pct: 3.0
   max_drawdown_pct: 10.0
-  max_concurrent_positions: 3
+  max_concurrent_positions: 6
   stop_loss_atr_multiplier: 1.5
   min_reward_risk_ratio: 1.5
   trailing_stop_activation_pct: 2.0
@@ -168,8 +216,8 @@ risk:
   # Portfolio exposure limits (MES-equivalent)
   # 1 MNQ=$2/pt = 0.4 MES-eq, 1 MYM=$0.50/pt = 0.1 MES-eq
   # 1 MES=$5/pt = 1.0 MES-eq, 1 M2K=$5/pt = 1.0 MES-eq
-  max_net_mes_equivalent: 3.0     # Max net directional exposure
-  max_gross_mes_equivalent: 5.0   # Max total (long+short) exposure
+  max_net_mes_equivalent: 6.0     # Max net directional exposure (6 diversified positions)
+  max_gross_mes_equivalent: 10.0  # Max total (long+short) exposure
 
   prop_firm:
     starting_balance: 50000      # Account starting balance

@@ -123,7 +123,7 @@ class WebhookClient:
 
     async def flatten_position(self, account_id: int = None) -> Optional[Dict]:
         """Close all positions by sending close webhooks for common symbols."""
-        for symbol in ["MNQ", "MYM", "MES", "M2K", "MGC", "NQ", "YM", "ES", "RTY", "GC"]:
+        for symbol in ["MNQ", "MYM", "MES", "M2K", "MGC", "MCL", "M6E", "M6B", "M6A", "M6J", "NQ", "YM", "ES", "RTY", "GC", "CL"]:
             await self.close_position(symbol)
         return {"status": "flattened"}
 
