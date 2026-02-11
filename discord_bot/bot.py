@@ -21,6 +21,9 @@ from discord_bot.embeds import (
     cycle_summary_embed,
     status_embed,
     forecast_embed,
+    radar_embed,
+    trade_alert_content,
+    execution_alert_content,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,6 +46,7 @@ class TradingBot(commands.Bot):
         self.signal_channel_id = int(
             config.get("discord", {}).get("channel_id", 0)
         )
+        self.alert_role_id = config.get("discord", {}).get("alert_role_id", "")
         self._signal_channel: Optional[discord.TextChannel] = None
         self._trading_system = None  # set via set_trading_system()
 
@@ -93,24 +97,34 @@ class TradingBot(commands.Bot):
     # ── Signal broadcasting ────────────────────────────────────────
 
     async def post_signal(self, instrument: str, signal, prediction: dict):
-        """Post a trading signal to the channel."""
+        """Post a trading signal to the channel with @mention alert."""
         if not self._signal_channel:
             return
+        # @mention alert text (triggers push notifications)
+        content = trade_alert_content(instrument, signal, self.alert_role_id or None)
         embed = signal_embed(instrument, signal, prediction)
-        await self._signal_channel.send(embed=embed)
+        await self._signal_channel.send(content=content, embed=embed)
 
     async def post_execution(self, instrument: str, result: dict, signal):
-        """Post order execution result."""
+        """Post order execution result with @mention alert."""
         if not self._signal_channel:
             return
+        content = execution_alert_content(instrument, result, self.alert_role_id or None)
         embed = execution_embed(instrument, result, signal)
-        await self._signal_channel.send(embed=embed)
+        await self._signal_channel.send(content=content, embed=embed)
 
     async def post_risk_rejection(self, instrument: str, reason: str):
         """Post risk rejection notice."""
         if not self._signal_channel:
             return
         embed = risk_rejected_embed(instrument, reason)
+        await self._signal_channel.send(embed=embed)
+
+    async def post_radar(self, radar_items: list):
+        """Post pre-trade radar — scenarios approaching thresholds."""
+        if not self._signal_channel or not radar_items:
+            return
+        embed = radar_embed(radar_items)
         await self._signal_channel.send(embed=embed)
 
     async def post_cycle_summary(

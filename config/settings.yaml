@@ -187,6 +187,10 @@ pickmytrade:
 #   DISCORD_CHANNEL_ID  — channel ID for signal posting
 discord:
   channel_id: "1470827087085441078"   # Trading Pilot channel
+  # alert_role_id: ""                 # Optional: Discord role ID for @mentions
+  #   Set this to a role ID to @mention that role on trade alerts.
+  #   Leave empty to use @here instead (notifies all online members).
+  #   To get role ID: Server Settings → Roles → right-click → Copy ID
 
 tradovate:
   mode: demo

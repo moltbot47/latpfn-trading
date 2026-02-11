@@ -23,6 +23,8 @@ from config import load_config
 from market_data.pipeline import DataPipeline
 from forecaster.wrapper import LaTPFNPredictor
 from signals.generator import SignalGenerator
+from signals.shot_classifier import nearest_tier_above
+from signals.confidence import score_confidence
 from risk.manager import RiskManager
 from execution.order_manager import OrderManager, Position
 from monitoring import dashboard
@@ -161,6 +163,15 @@ class TradingSystem:
                 except Exception:
                     pass
 
+            # Discord radar — instruments approaching trade thresholds
+            if self.discord_bot:
+                try:
+                    radar_items = self._build_radar(predictions)
+                    if radar_items:
+                        await self.discord_bot.post_radar(radar_items)
+                except Exception:
+                    pass
+
             # Wait for next cycle
             logger.info("Next cycle in %d minutes", self.interval)
             await asyncio.sleep(self.interval * 60)
@@ -267,6 +278,57 @@ class TradingSystem:
             ))
 
         return prediction
+
+    def _build_radar(self, predictions: dict) -> list:
+        """
+        Check predictions for instruments approaching a trade threshold.
+
+        Returns list of radar items for instruments that are:
+        - Non-neutral direction
+        - Below the lowest enabled tier BUT within 75% of its threshold
+        """
+        tiers_config = self.config.get("shot_tiers", {})
+        radar_items = []
+
+        for inst, pred in predictions.items():
+            if pred is None or pred["direction"] == "neutral":
+                continue
+
+            # Compute composite confidence (same as signal generator)
+            confidence = score_confidence(
+                model_confidence=pred["confidence"],
+                forecast=pred["forecast_prices"],
+                uncertainty=pred["uncertainty"],
+                current_price=pred["current_price"],
+                regime=pred["regime"],
+                signal_config=self.config["signal"],
+            )
+
+            # Find nearest tier above this confidence
+            tier_name, threshold = nearest_tier_above(confidence, tiers_config)
+            if not tier_name or threshold <= 0:
+                continue  # already in a tier (signal was generated) or no tiers
+
+            # Only show on radar if within 75% of threshold (not too far away)
+            progress = confidence / threshold
+            if progress < 0.60:
+                continue  # too far from triggering
+
+            forecast_prices = pred.get("forecast_prices", [])
+            forecast_end = forecast_prices[-1] if len(forecast_prices) > 0 else pred["current_price"]
+
+            radar_items.append({
+                "instrument": inst,
+                "direction": pred["direction"],
+                "confidence": confidence,
+                "nearest_tier": tier_name,
+                "tier_threshold": threshold,
+                "regime": pred["regime"],
+                "current_price": pred["current_price"],
+                "forecast_end": forecast_end,
+            })
+
+        return radar_items
 
     async def _resolve_contracts(self):
         """Look up active front-month contract for each instrument."""

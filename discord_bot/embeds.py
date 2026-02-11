@@ -203,3 +203,77 @@ def forecast_embed(instrument: str, prediction: dict) -> discord.Embed:
 
     embed.set_footer(text="LaT-PFN Trading System")
     return embed
+
+
+# ── Pre-Trade Radar ─────────────────────────────────────────────
+
+
+def radar_embed(radar_items: list) -> discord.Embed:
+    """
+    Build embed for pre-trade radar — scenarios building toward a trigger.
+
+    Each item dict: instrument, direction, confidence, nearest_tier,
+    tier_threshold, regime, current_price, forecast_end
+    """
+    embed = discord.Embed(
+        title="\U0001F4E1 Trade Radar — Scenarios Building",
+        description="These instruments are approaching trade thresholds",
+        color=0xF1C40F,  # yellow/amber
+        timestamp=datetime.now(timezone.utc),
+    )
+
+    for item in radar_items:
+        inst = item["instrument"]
+        direction = item["direction"]
+        conf = item["confidence"]
+        tier = item["nearest_tier"].replace("_", " ").title()
+        threshold = item["tier_threshold"]
+        gap = threshold - conf
+        regime = item["regime"].title()
+
+        # Progress bar toward threshold
+        progress = conf / threshold if threshold > 0 else 0
+        bar_len = 10
+        filled = min(int(progress * bar_len), bar_len)
+        bar = "\u2588" * filled + "\u2591" * (bar_len - filled)
+
+        dir_emoji = {
+            "long": "\U0001F7E2",
+            "short": "\U0001F534",
+        }.get(direction, "\u26AA")
+
+        embed.add_field(
+            name=f"{dir_emoji} {inst} — {direction.upper()}",
+            value=(
+                f"Confidence: **{conf:.1%}** \u2192 needs **{threshold:.0%}** for {tier}\n"
+                f"`{bar}` {progress:.0%} ready\n"
+                f"Gap: {gap:.1%} | Regime: {regime}\n"
+                f"Price: ${item['current_price']:,.2f} \u2192 ${item['forecast_end']:,.2f}"
+            ),
+            inline=False,
+        )
+
+    embed.set_footer(text="LaT-PFN Radar \u2014 updated every cycle")
+    return embed
+
+
+# ── Alert-level embeds with @mentions ────────────────────────────
+
+
+def trade_alert_content(instrument: str, signal, alert_role_id: str = None) -> str:
+    """Build the text content (outside embed) for trade alerts with @mentions."""
+    dir_emoji = "\U0001F7E2" if signal.direction == "long" else "\U0001F534"
+    tier_label = signal.shot_type.replace("_", " ").title()
+    mention = f"<@&{alert_role_id}>" if alert_role_id else "@here"
+    return (
+        f"{mention} {dir_emoji} **TRADE ALERT** \u2014 "
+        f"{instrument} {signal.direction.upper()} ({tier_label})"
+    )
+
+
+def execution_alert_content(instrument: str, result: dict, alert_role_id: str = None) -> str:
+    """Build text content for order execution alerts."""
+    if result and "orderId" in result:
+        mention = f"<@&{alert_role_id}>" if alert_role_id else "@here"
+        return f"{mention} \u2705 **ORDER PLACED** \u2014 {instrument} (ID: {result['orderId']})"
+    return f"\u274C **ORDER FAILED** \u2014 {instrument}"

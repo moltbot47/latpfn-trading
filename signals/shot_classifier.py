@@ -70,3 +70,26 @@ def classify(confidence: float, tiers_config: dict) -> tuple[str, dict]:
 def get_tier_color(tier_name: str) -> str:
     """Get Rich markup color for a tier."""
     return TIER_COLORS.get(tier_name, "dim")
+
+
+def nearest_tier_above(confidence: float, tiers_config: dict) -> tuple[str, float]:
+    """
+    Find the nearest enabled tier whose threshold is above *confidence*.
+
+    Returns:
+        (tier_name, tier_threshold) or ("", 0.0) if already in a tier
+        or no enabled tiers exist.
+    """
+    sorted_tiers = sorted(
+        tiers_config.items(),
+        key=lambda item: item[1]["confidence_min"],
+    )
+
+    for tier_name, params in sorted_tiers:
+        if not params.get("enabled", True):
+            continue
+        threshold = params["confidence_min"]
+        if confidence < threshold:
+            return tier_name, threshold
+
+    return "", 0.0
