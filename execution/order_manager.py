@@ -88,6 +88,18 @@ class OrderManager:
     def has_position(self, instrument: str) -> bool:
         return instrument in self.open_positions
 
+    def remove_position(self, instrument: str):
+        """Remove a position from tracking (used when closed externally)."""
+        pos = self.open_positions.pop(instrument, None)
+        if pos:
+            self.closed_positions.append(pos)
+            logger.info("Position removed from tracking: %s", instrument)
+
+    def close_all(self):
+        """Remove all open positions from tracking."""
+        for instrument in list(self.open_positions.keys()):
+            self.remove_position(instrument)
+
     @property
     def open_count(self) -> int:
         return len(self.open_positions)

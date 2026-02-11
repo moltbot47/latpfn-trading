@@ -57,6 +57,8 @@ class TradingBot(commands.Bot):
         self.tree.add_command(forecast_cmd)
         self.tree.add_command(risk_cmd)
         self.tree.add_command(tiers_cmd)
+        self.tree.add_command(close_cmd)
+        self.tree.add_command(closeall_cmd)
         await self.tree.sync()
         logger.info("Slash commands synced")
 
@@ -330,3 +332,75 @@ async def tiers_cmd(interaction: discord.Interaction):
 
     embed.set_footer(text="LaT-PFN Trading System")
     await interaction.response.send_message(embed=embed)
+
+
+@app_commands.command(name="close", description="Close a specific position via webhook")
+@app_commands.describe(symbol="Symbol to close (e.g. MNQ, MYM, MGC)")
+@app_commands.choices(symbol=[
+    app_commands.Choice(name="MNQ (Micro Nasdaq)", value="MNQ"),
+    app_commands.Choice(name="MYM (Micro Dow)", value="MYM"),
+    app_commands.Choice(name="MGC (Micro Gold)", value="MGC"),
+])
+async def close_cmd(interaction: discord.Interaction, symbol: str):
+    bot = get_bot()
+    if not bot or not bot._trading_system:
+        await interaction.response.send_message("Trading system not connected.", ephemeral=True)
+        return
+
+    ts = bot._trading_system
+    if not ts.executor:
+        await interaction.response.send_message("No executor connected (dry_run mode).", ephemeral=True)
+        return
+
+    await interaction.response.defer(thinking=True)
+
+    try:
+        result = await ts.executor.close_position(symbol)
+        if result:
+            ts.order_mgr.remove_position(symbol)
+            embed = discord.Embed(
+                title=f"Position Closed: {symbol}",
+                description="Close webhook sent to PickMyTrade",
+                color=0x00CC00,
+                timestamp=datetime.now(timezone.utc),
+            )
+        else:
+            embed = discord.Embed(
+                title=f"Close Failed: {symbol}",
+                description="Webhook did not return success",
+                color=0xCC0000,
+                timestamp=datetime.now(timezone.utc),
+            )
+        embed.set_footer(text="LaT-PFN Trading System")
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        await interaction.followup.send(f"Close failed: {e}")
+
+
+@app_commands.command(name="closeall", description="Close ALL open positions immediately")
+async def closeall_cmd(interaction: discord.Interaction):
+    bot = get_bot()
+    if not bot or not bot._trading_system:
+        await interaction.response.send_message("Trading system not connected.", ephemeral=True)
+        return
+
+    ts = bot._trading_system
+    if not ts.executor:
+        await interaction.response.send_message("No executor connected (dry_run mode).", ephemeral=True)
+        return
+
+    await interaction.response.defer(thinking=True)
+
+    try:
+        await ts.executor.flatten_position()
+        ts.order_mgr.close_all()
+        embed = discord.Embed(
+            title="All Positions Closed",
+            description="Flatten webhook sent for all symbols",
+            color=0x00CC00,
+            timestamp=datetime.now(timezone.utc),
+        )
+        embed.set_footer(text="LaT-PFN Trading System")
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        await interaction.followup.send(f"Flatten failed: {e}")
