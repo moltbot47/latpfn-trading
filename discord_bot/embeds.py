@@ -40,6 +40,20 @@ def signal_embed(
         timestamp=datetime.now(timezone.utc),
     )
 
+    # Win probability (model confidence estimate — not guaranteed)
+    win_pct = signal.confidence * 100
+    if win_pct >= 60:
+        prob_emoji = "\U0001F525"  # fire
+    elif win_pct >= 45:
+        prob_emoji = "\U0001F4CA"  # chart
+    else:
+        prob_emoji = "\u26A0\uFE0F"  # warning
+    embed.add_field(
+        name=f"{prob_emoji} Win Probability",
+        value=f"**{win_pct:.1f}%**\n*model estimate*",
+        inline=True,
+    )
+
     embed.add_field(name="Entry", value=f"${signal.entry_price:,.2f}", inline=True)
     embed.add_field(name="Stop Loss", value=f"${signal.stop_loss:,.2f}", inline=True)
     embed.add_field(name="Take Profit", value=f"${signal.take_profit:,.2f}", inline=True)
@@ -101,8 +115,22 @@ def execution_embed(
             color=0x00CC00,
             timestamp=datetime.now(timezone.utc),
         )
+        # Win probability
+        win_pct = signal.confidence * 100
+        if win_pct >= 60:
+            prob_emoji = "\U0001F525"
+        elif win_pct >= 45:
+            prob_emoji = "\U0001F4CA"
+        else:
+            prob_emoji = "\u26A0\uFE0F"
+
         embed.add_field(name="Order ID", value=str(result["orderId"]), inline=True)
         embed.add_field(name="Entry", value=f"${signal.entry_price:,.2f}", inline=True)
+        embed.add_field(
+            name=f"{prob_emoji} Win Prob",
+            value=f"**{win_pct:.1f}%** *(est.)*",
+            inline=True,
+        )
         embed.add_field(name="SL / TP", value=f"${signal.stop_loss:,.2f} / ${signal.take_profit:,.2f}", inline=True)
 
         # Risk/reward breakdown
