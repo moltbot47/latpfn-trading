@@ -124,6 +124,12 @@ risk:
   trailing_stop_activation_pct: 2.0
   trailing_stop_distance_pct: 1.0
 
+  # Portfolio exposure limits (MES-equivalent)
+  # 1 MNQ=$2/pt = 0.4 MES-eq, 1 MYM=$0.50/pt = 0.1 MES-eq
+  # 1 MES=$5/pt = 1.0 MES-eq, 1 M2K=$5/pt = 1.0 MES-eq
+  max_net_mes_equivalent: 3.0     # Max net directional exposure
+  max_gross_mes_equivalent: 5.0   # Max total (long+short) exposure
+
   prop_firm:
     starting_balance: 50000      # Account starting balance
     max_daily_loss_usd: 1000     # Conservative daily loss limit

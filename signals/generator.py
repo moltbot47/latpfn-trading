@@ -29,6 +29,7 @@ class TradingSignal:
     regime: str
     shot_type: str = "no_trade"     # NBA tier: layup, short_range, free_throw, etc.
     size_multiplier: float = 1.0    # from shot tier config (risk manager uses this)
+    regime_size_mult: float = 1.0   # from market-based regime detection (sizing adjustment)
     timestamp: datetime = field(default_factory=datetime.now)
 
 

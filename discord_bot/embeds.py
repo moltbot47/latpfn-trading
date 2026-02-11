@@ -4,6 +4,7 @@ Discord embed builders for trading signals, status, and forecasts.
 
 import discord
 from datetime import datetime, timezone
+from signals.strategy_explainer import get_tier_explainer, get_tier_wiki_url
 
 
 # Shot tier colors (Discord embed hex)
@@ -71,6 +72,19 @@ def signal_embed(
         value=f"Risk: ${risk_pts * cs:,.2f}\nReward: ${reward_pts * cs:,.2f}",
         inline=True,
     )
+
+    # Strategy psychology for this tier
+    explainer = get_tier_explainer(signal.shot_type)
+    if explainer:
+        wiki_url = get_tier_wiki_url(signal.shot_type)
+        embed.add_field(
+            name=f"{explainer['emoji']} Strategy Psychology",
+            value=(
+                f"*{explainer['psychology']}*\n"
+                f"[\U0001F4D6 Full Strategy Guide]({wiki_url})"
+            ),
+            inline=False,
+        )
 
     embed.set_footer(text="LaT-PFN Trading System")
     return embed
@@ -288,7 +302,8 @@ def radar_embed(radar_items: list) -> discord.Embed:
         inst = item["instrument"]
         direction = item["direction"]
         conf = item["confidence"]
-        tier = item["nearest_tier"].replace("_", " ").title()
+        tier_key = item["nearest_tier"]
+        tier = tier_key.replace("_", " ").title()
         threshold = item["tier_threshold"]
         gap = threshold - conf
         regime = item["regime"].title()
@@ -304,6 +319,16 @@ def radar_embed(radar_items: list) -> discord.Embed:
             "short": "\U0001F534",
         }.get(direction, "\u26AA")
 
+        # Strategy theory for this tier
+        explainer = get_tier_explainer(tier_key)
+        wiki_url = get_tier_wiki_url(tier_key)
+        theory_line = ""
+        if explainer:
+            theory_line = (
+                f"\n{explainer['emoji']} *{explainer['theory'][:120]}...*"
+                f"\n[\U0001F4D6 Strategy Deep-Dive]({wiki_url})"
+            )
+
         embed.add_field(
             name=f"{dir_emoji} {inst} — {direction.upper()}",
             value=(
@@ -311,6 +336,7 @@ def radar_embed(radar_items: list) -> discord.Embed:
                 f"`{bar}` {progress:.0%} ready\n"
                 f"Gap: {gap:.1%} | Regime: {regime}\n"
                 f"Price: ${item['current_price']:,.2f} \u2192 ${item['forecast_end']:,.2f}"
+                f"{theory_line}"
             ),
             inline=False,
         )

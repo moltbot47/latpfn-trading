@@ -24,6 +24,7 @@ class Position:
     order_id: Optional[int] = None
     entry_time: datetime = field(default_factory=datetime.now)
     current_price: float = 0.0
+    trade_log_id: Optional[int] = None
 
     def to_dict(self) -> dict:
         """Serialize to a JSON-compatible dictionary."""
@@ -37,6 +38,7 @@ class Position:
             "order_id": self.order_id,
             "entry_time": self.entry_time.isoformat(),
             "current_price": self.current_price,
+            "trade_log_id": self.trade_log_id,
         }
 
     @classmethod
@@ -54,6 +56,7 @@ class Position:
             if "entry_time" in data
             else datetime.now(),
             current_price=data.get("current_price", 0.0),
+            trade_log_id=data.get("trade_log_id"),
         )
 
     @property
@@ -67,11 +70,12 @@ class Position:
 class OrderManager:
     """Tracks positions and realized P&L."""
 
-    def __init__(self, state_file: str = "./data/positions.json"):
+    def __init__(self, state_file: str = "./data/positions.json", trade_logger=None):
         self.open_positions: Dict[str, Position] = {}  # keyed by instrument
         self.closed_positions: List[Position] = []
         self.realized_pnl_today: float = 0.0
         self.state_file: str = state_file
+        self.trade_logger = trade_logger
 
     def add_position(self, position: Position):
         self.open_positions[position.instrument] = position
@@ -111,6 +115,17 @@ class OrderManager:
             "Position closed: %s  exit=%.2f  pnl=%.2f pts ($%.2f)",
             instrument, exit_price, pnl_points, pnl_dollars,
         )
+
+        # Log exit to SQLite trade logger
+        if pos.trade_log_id and self.trade_logger:
+            duration = (datetime.now() - pos.entry_time).total_seconds() / 60.0
+            self.trade_logger.update_trade_exit(
+                trade_id=pos.trade_log_id,
+                exit_price=exit_price,
+                exit_reason="manual",
+                pnl_dollars=pnl_dollars,
+                time_in_trade_minutes=duration,
+            )
 
         self._save_state()
         return pnl_dollars
