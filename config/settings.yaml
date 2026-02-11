@@ -113,6 +113,47 @@ instruments:
   #     - "UUP"
   #     - "^VIX"
 
+  # ── POST-EVAL DIVERSIFICATION ──────────────────────────────────
+  # Uncomment MCL and M6E AFTER passing the Apex eval to add
+  # uncorrelated asset classes (oil, currencies) for diversification.
+  # Also add MCL and M6E symbol mappings in the PickMyTrade dashboard.
+
+  # MCL: DISABLED — Enable after passing eval for oil diversification
+  # MCL:
+  #   name: "Micro WTI Crude Oil Futures"
+  #   yfinance_ticker: "CL=F"
+  #   tradovate_symbol: "MCL"
+  #   contract_size: 100       # $100 per point (100 barrels × $1/barrel)
+  #   tick_size: 0.01
+  #   tick_value: 1.00
+  #   context_assets:
+  #     - "USO"    # United States Oil Fund
+  #     - "XLE"    # Energy Select Sector
+  #     - "^VIX"   # Volatility Index
+  #     - "DX-Y.NYB"  # Dollar Index (oil inversely correlated)
+  #     - "^TNX"   # 10-Year Treasury Yield
+  #     - "XOP"    # Oil & Gas Exploration ETF
+  #     - "SPY"    # S&P 500 (macro sentiment)
+  #     - "UNG"    # Natural Gas ETF (energy sector)
+
+  # M6E: DISABLED — Enable after passing eval for FX diversification
+  # M6E:
+  #   name: "Micro EUR/USD Futures"
+  #   yfinance_ticker: "EURUSD=X"
+  #   tradovate_symbol: "M6E"
+  #   contract_size: 12500     # $12,500 notional (12,500 euros × rate)
+  #   tick_size: 0.0001
+  #   tick_value: 1.25
+  #   context_assets:
+  #     - "FXE"    # Euro Currency ETF
+  #     - "DX-Y.NYB"  # Dollar Index (directly inverse)
+  #     - "^VIX"   # Volatility Index
+  #     - "^TNX"   # 10-Year Treasury (rate differentials)
+  #     - "EWG"    # Germany ETF (Eurozone proxy)
+  #     - "UUP"    # Dollar Bullish ETF
+  #     - "GLD"    # Gold (often moves with EUR vs USD)
+  #     - "SPY"    # S&P 500 (risk sentiment)
+
 risk:
   max_risk_per_trade_pct: 2.0    # 2% of account equity ($1000 on $50k)
   max_position_size_contracts: 5   # micros are 1/10th size, can safely trade more
