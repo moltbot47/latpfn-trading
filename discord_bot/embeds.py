@@ -24,7 +24,9 @@ DIRECTION_COLORS = {
 }
 
 
-def signal_embed(instrument: str, signal, prediction: dict) -> discord.Embed:
+def signal_embed(
+    instrument: str, signal, prediction: dict, contract_size: float = 0
+) -> discord.Embed:
     """Build a rich embed for a trading signal."""
     dir_emoji = "\U0001F7E2" if signal.direction == "long" else "\U0001F534"
     tier_label = signal.shot_type.replace("_", " ").title()
@@ -43,17 +45,40 @@ def signal_embed(instrument: str, signal, prediction: dict) -> discord.Embed:
     embed.add_field(name="Contracts", value=str(signal.position_size), inline=True)
     embed.add_field(name="Regime", value=signal.regime.title(), inline=True)
 
-    # Risk/reward
+    # Risk/reward in points and dollars
     risk_pts = abs(signal.entry_price - signal.stop_loss)
     reward_pts = abs(signal.take_profit - signal.entry_price)
     rr = reward_pts / risk_pts if risk_pts > 0 else 0
     embed.add_field(name="R:R", value=f"{rr:.1f}:1", inline=True)
 
+    qty = signal.position_size
+    cs = contract_size if contract_size > 0 else 1
+    risk_usd = risk_pts * cs * qty
+    reward_usd = reward_pts * cs * qty
+
+    embed.add_field(
+        name="\U0001F6E1 Risk",
+        value=f"**${risk_usd:,.2f}**\n{risk_pts:,.2f} pts \u00d7 {qty} ct",
+        inline=True,
+    )
+    embed.add_field(
+        name="\U0001F3AF Reward",
+        value=f"**${reward_usd:,.2f}**\n{reward_pts:,.2f} pts \u00d7 {qty} ct",
+        inline=True,
+    )
+    embed.add_field(
+        name="\U0001F4B0 Per Contract",
+        value=f"Risk: ${risk_pts * cs:,.2f}\nReward: ${reward_pts * cs:,.2f}",
+        inline=True,
+    )
+
     embed.set_footer(text="LaT-PFN Trading System")
     return embed
 
 
-def execution_embed(instrument: str, result: dict, signal) -> discord.Embed:
+def execution_embed(
+    instrument: str, result: dict, signal, contract_size: float = 0
+) -> discord.Embed:
     """Build embed for order execution result."""
     if result and "orderId" in result:
         embed = discord.Embed(
@@ -65,6 +90,27 @@ def execution_embed(instrument: str, result: dict, signal) -> discord.Embed:
         embed.add_field(name="Order ID", value=str(result["orderId"]), inline=True)
         embed.add_field(name="Entry", value=f"${signal.entry_price:,.2f}", inline=True)
         embed.add_field(name="SL / TP", value=f"${signal.stop_loss:,.2f} / ${signal.take_profit:,.2f}", inline=True)
+
+        # Risk/reward breakdown
+        risk_pts = abs(signal.entry_price - signal.stop_loss)
+        reward_pts = abs(signal.take_profit - signal.entry_price)
+        rr = reward_pts / risk_pts if risk_pts > 0 else 0
+        qty = signal.position_size
+        cs = contract_size if contract_size > 0 else 1
+        risk_usd = risk_pts * cs * qty
+        reward_usd = reward_pts * cs * qty
+
+        embed.add_field(
+            name="\U0001F6E1 Risk",
+            value=f"**${risk_usd:,.2f}** ({risk_pts:,.2f} pts)",
+            inline=True,
+        )
+        embed.add_field(
+            name="\U0001F3AF Reward",
+            value=f"**${reward_usd:,.2f}** ({reward_pts:,.2f} pts)",
+            inline=True,
+        )
+        embed.add_field(name="R:R", value=f"{rr:.1f}:1", inline=True)
     else:
         embed = discord.Embed(
             title=f"Order Failed: {instrument}",

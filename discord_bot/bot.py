@@ -96,13 +96,17 @@ class TradingBot(commands.Bot):
 
     # ── Signal broadcasting ────────────────────────────────────────
 
+    def _contract_size(self, instrument: str) -> float:
+        """Get contract size for an instrument from config."""
+        return self.config.get("instruments", {}).get(instrument, {}).get("contract_size", 1)
+
     async def post_signal(self, instrument: str, signal, prediction: dict):
         """Post a trading signal to the channel with @mention alert."""
         if not self._signal_channel:
             return
         # @mention alert text (triggers push notifications)
         content = trade_alert_content(instrument, signal, self.alert_role_id or None)
-        embed = signal_embed(instrument, signal, prediction)
+        embed = signal_embed(instrument, signal, prediction, self._contract_size(instrument))
         await self._signal_channel.send(content=content, embed=embed)
 
     async def post_execution(self, instrument: str, result: dict, signal):
@@ -110,7 +114,7 @@ class TradingBot(commands.Bot):
         if not self._signal_channel:
             return
         content = execution_alert_content(instrument, result, self.alert_role_id or None)
-        embed = execution_embed(instrument, result, signal)
+        embed = execution_embed(instrument, result, signal, self._contract_size(instrument))
         await self._signal_channel.send(content=content, embed=embed)
 
     async def post_risk_rejection(self, instrument: str, reason: str):

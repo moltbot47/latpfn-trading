@@ -60,22 +60,24 @@ instruments:
       - "MSFT"   # Microsoft
       - "NVDA"   # NVIDIA
 
-  MGC:
-    name: "Micro Gold Futures"
-    yfinance_ticker: "GC=F"         # same price as full-size
-    tradovate_symbol: "MGC"
-    contract_size: 10       # $10 per point (1/10th of GC)
-    tick_size: 0.10
-    tick_value: 1.0
-    context_assets:
-      - "GLD"    # Gold ETF
-      - "SLV"    # Silver ETF
-      - "DX-Y.NYB"  # Dollar Index (inverse)
-      - "^TNX"   # 10-Year Treasury
-      - "TIP"    # TIPS (inflation)
-      - "DBC"    # Commodity Index
-      - "UUP"    # Dollar Bullish Fund
-      - "^VIX"   # Volatility
+  # MGC: TEMPORARILY DISABLED — Apex halted all metals (GC, SI, MGC, HG, PL, PA)
+  # due to market volatility. Re-enable when Apex lifts the restriction.
+  # MGC:
+  #   name: "Micro Gold Futures"
+  #   yfinance_ticker: "GC=F"
+  #   tradovate_symbol: "MGC"
+  #   contract_size: 10
+  #   tick_size: 0.10
+  #   tick_value: 1.0
+  #   context_assets:
+  #     - "GLD"
+  #     - "SLV"
+  #     - "DX-Y.NYB"
+  #     - "^TNX"
+  #     - "TIP"
+  #     - "DBC"
+  #     - "UUP"
+  #     - "^VIX"
 
 risk:
   max_risk_per_trade_pct: 2.0    # 2% of account equity ($1000 on $50k)
