@@ -93,6 +93,16 @@ class SignalGenerator:
             )
             return None
 
+        # Per-instrument tier filter (backtest-driven optimization)
+        inst_cfg = self.config.get("instruments", {}).get(instrument, {})
+        allowed_tiers = inst_cfg.get("allowed_tiers")
+        if allowed_tiers and tier_name not in allowed_tiers:
+            logger.info(
+                "%s: tier %s not in allowed_tiers %s — skipping",
+                instrument, tier_name, allowed_tiers,
+            )
+            return None
+
         # Extract tier multipliers
         target_multiplier = tier_params.get("target_multiplier", 1.0)
         stop_multiplier = tier_params.get("stop_multiplier", 1.0)

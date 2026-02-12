@@ -33,6 +33,10 @@ instruments:
     contract_size: 0.50     # $0.50 per point (1/10th of YM)
     tick_size: 1.0
     tick_value: 0.50
+    # Backtest: 36 trades, 52.8% WR, +$215, PF 1.24
+    # Best tiers: three_pointer (PF 1.47), free_throw (PF 1.41), short_range (PF 1.03)
+    # Cut: layup (PF 0.98 — breakeven, not worth the risk)
+    allowed_tiers: [short_range, free_throw, three_pointer]
     context_assets:
       - "SPY"    # S&P 500 ETF
       - "DIA"    # Dow ETF
@@ -50,6 +54,10 @@ instruments:
     contract_size: 2        # $2 per point (1/10th of NQ)
     tick_size: 0.25
     tick_value: 0.50
+    # Backtest: 37 trades, 43.2% WR, +$441, PF 1.16
+    # Best tiers: three_pointer (PF 2.98, +$1135), short_range (PF 2.31, +$150)
+    # Cut: layup (PF 0.92, -$59), free_throw (PF 0.40, -$784)
+    allowed_tiers: [short_range, three_pointer]
     context_assets:
       - "QQQ"    # Nasdaq ETF
       - "SPY"    # S&P 500 ETF
@@ -67,6 +75,11 @@ instruments:
     contract_size: 5.0        # $5 per point (1/10th of ES)
     tick_size: 0.25
     tick_value: 1.25
+    # Backtest: 36 trades, 50% WR, -$222, PF 0.84 (overall losing)
+    # BUT: three_pointer (PF 2.90, +$449) and short_range (PF 1.44, +$29) are profitable
+    # Cut: layup (PF 0.46, -$293), free_throw (PF 0.28, -$407)
+    # With tier filter: flips from -$222 to +$478 (profitable!)
+    allowed_tiers: [short_range, three_pointer]
     context_assets:
       - "SPY"    # S&P 500 ETF
       - "DIA"    # Dow ETF
@@ -77,22 +90,24 @@ instruments:
       - "XLK"    # Technology sector
       - "IWM"    # Russell 2000
 
-  M2K:
-    name: "Micro Russell 2000 Futures"
-    yfinance_ticker: "RTY=F"
-    tradovate_symbol: "M2K"
-    contract_size: 5.0        # $5 per point (1/10th of RTY)
-    tick_size: 0.10
-    tick_value: 0.50
-    context_assets:
-      - "IWM"    # Russell 2000 ETF
-      - "SPY"    # S&P 500 ETF
-      - "^VIX"   # Volatility Index
-      - "^TNX"   # 10-Year Treasury Yield
-      - "XLF"    # Financial sector
-      - "XLI"    # Industrial sector
-      - "XLK"    # Technology sector
-      - "KRE"    # Regional Banks ETF
+  # M2K: DISABLED — Backtest shows 38.9% WR, PF 0.34, -$844 over 28 days.
+  # Model has no predictive edge on Russell 2000 small caps.
+  # M2K:
+  #   name: "Micro Russell 2000 Futures"
+  #   yfinance_ticker: "RTY=F"
+  #   tradovate_symbol: "M2K"
+  #   contract_size: 5.0
+  #   tick_size: 0.10
+  #   tick_value: 0.50
+  #   context_assets:
+  #     - "IWM"
+  #     - "SPY"
+  #     - "^VIX"
+  #     - "^TNX"
+  #     - "XLF"
+  #     - "XLI"
+  #     - "XLK"
+  #     - "KRE"
 
   # MGC: TEMPORARILY DISABLED — Apex halted all metals (GC, SI, MGC, HG, PL, PA)
   # due to market volatility. Re-enable when Apex lifts the restriction.
@@ -117,90 +132,52 @@ instruments:
   # Uncorrelated asset classes for portfolio diversification.
   # Remember to add MCL and M6E symbol mappings in PickMyTrade dashboard.
 
-  MCL:
-    name: "Micro WTI Crude Oil Futures"
-    yfinance_ticker: "CL=F"
-    tradovate_symbol: "MCL"
-    contract_size: 100       # $100 per point (100 barrels × $1/barrel)
-    tick_size: 0.01
-    tick_value: 1.00
-    context_assets:
-      - "USO"    # United States Oil Fund
-      - "XLE"    # Energy Select Sector
-      - "^VIX"   # Volatility Index
-      - "DX-Y.NYB"  # Dollar Index (oil inversely correlated)
-      - "^TNX"   # 10-Year Treasury Yield
-      - "XOP"    # Oil & Gas Exploration ETF
-      - "SPY"    # S&P 500 (macro sentiment)
-      - "UNG"    # Natural Gas ETF (energy sector)
+  # MCL: DISABLED — Backtest shows 0% WR across 25 trades, -$8,011.
+  # Model has zero predictive power on crude oil.
+  # MCL:
+  #   name: "Micro WTI Crude Oil Futures"
+  #   yfinance_ticker: "CL=F"
+  #   tradovate_symbol: "MCL"
+  #   contract_size: 100
+  #   tick_size: 0.01
+  #   tick_value: 1.00
+  #   context_assets: ["USO","XLE","^VIX","DX-Y.NYB","^TNX","XOP","SPY","UNG"]
 
-  M6E:
-    name: "Micro EUR/USD Futures"
-    yfinance_ticker: "EURUSD=X"
-    tradovate_symbol: "M6E"
-    contract_size: 12500     # $12,500 notional (12,500 euros × rate)
-    tick_size: 0.0001
-    tick_value: 1.25
-    context_assets:
-      - "FXE"    # Euro Currency ETF
-      - "DX-Y.NYB"  # Dollar Index (directly inverse)
-      - "^VIX"   # Volatility Index
-      - "^TNX"   # 10-Year Treasury (rate differentials)
-      - "EWG"    # Germany ETF (Eurozone proxy)
-      - "UUP"    # Dollar Bullish ETF
-      - "GLD"    # Gold (often moves with EUR vs USD)
-      - "SPY"    # S&P 500 (risk sentiment)
-
-  M6B:
-    name: "Micro GBP/USD Futures"
-    yfinance_ticker: "GBPUSD=X"
-    tradovate_symbol: "M6B"
-    contract_size: 6250      # $6,250 notional (6,250 GBP × rate)
-    tick_size: 0.0001
-    tick_value: 0.625
-    context_assets:
-      - "FXB"    # British Pound ETF
-      - "DX-Y.NYB"  # Dollar Index
-      - "^VIX"   # Volatility Index
-      - "^TNX"   # 10-Year Treasury
-      - "EWU"    # UK ETF
-      - "UUP"    # Dollar Bullish ETF
-      - "GLD"    # Gold
-      - "SPY"    # S&P 500
-
-  M6A:
-    name: "Micro AUD/USD Futures"
-    yfinance_ticker: "AUDUSD=X"
-    tradovate_symbol: "M6A"
-    contract_size: 10000     # $10,000 notional (10,000 AUD × rate)
-    tick_size: 0.0001
-    tick_value: 1.00
-    context_assets:
-      - "FXA"    # Australian Dollar ETF
-      - "DX-Y.NYB"  # Dollar Index
-      - "^VIX"   # Volatility Index
-      - "^TNX"   # 10-Year Treasury
-      - "EWA"    # Australia ETF
-      - "USO"    # Oil (AUD correlates with commodities)
-      - "GLD"    # Gold (Australia is major gold exporter)
-      - "SPY"    # S&P 500
-
-  M6J:
-    name: "Micro JPY/USD Futures"
-    yfinance_ticker: "JPYUSD=X"
-    tradovate_symbol: "M6J"
-    contract_size: 1250000   # ¥1,250,000 notional
-    tick_size: 0.0000005
-    tick_value: 0.625
-    context_assets:
-      - "FXY"    # Japanese Yen ETF
-      - "DX-Y.NYB"  # Dollar Index
-      - "^VIX"   # Volatility Index
-      - "^TNX"   # 10-Year Treasury
-      - "EWJ"    # Japan ETF
-      - "UUP"    # Dollar Bullish ETF
-      - "GLD"    # Gold (safe haven correlation)
-      - "SPY"    # S&P 500
+  # M6E, M6B, M6A, M6J: DISABLED — yfinance returns broken price data for
+  # CME FX futures tickers (6E=F, 6B=F, etc). 0% WR across all FX micros.
+  # Would need alternative data source (Tradovate API) to re-evaluate.
+  # M6E:
+  #   name: "Micro EUR/USD Futures"
+  #   yfinance_ticker: "EURUSD=X"
+  #   tradovate_symbol: "M6E"
+  #   contract_size: 12500
+  #   tick_size: 0.0001
+  #   tick_value: 1.25
+  #   context_assets: ["FXE","DX-Y.NYB","^VIX","^TNX","EWG","UUP","GLD","SPY"]
+  # M6B:
+  #   name: "Micro GBP/USD Futures"
+  #   yfinance_ticker: "GBPUSD=X"
+  #   tradovate_symbol: "M6B"
+  #   contract_size: 6250
+  #   tick_size: 0.0001
+  #   tick_value: 0.625
+  #   context_assets: ["FXB","DX-Y.NYB","^VIX","^TNX","EWU","UUP","GLD","SPY"]
+  # M6A:
+  #   name: "Micro AUD/USD Futures"
+  #   yfinance_ticker: "AUDUSD=X"
+  #   tradovate_symbol: "M6A"
+  #   contract_size: 10000
+  #   tick_size: 0.0001
+  #   tick_value: 1.00
+  #   context_assets: ["FXA","DX-Y.NYB","^VIX","^TNX","EWA","USO","GLD","SPY"]
+  # M6J:
+  #   name: "Micro JPY/USD Futures"
+  #   yfinance_ticker: "JPYUSD=X"
+  #   tradovate_symbol: "M6J"
+  #   contract_size: 1250000
+  #   tick_size: 0.0000005
+  #   tick_value: 0.625
+  #   context_assets: ["FXY","DX-Y.NYB","^VIX","^TNX","EWJ","UUP","GLD","SPY"]
 
 risk:
   max_risk_per_trade_pct: 2.0    # 2% of account equity ($1000 on $50k)
