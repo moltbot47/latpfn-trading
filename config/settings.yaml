@@ -56,8 +56,9 @@ instruments:
     tick_value: 0.50
     # Backtest: 37 trades, 43.2% WR, +$441, PF 1.16
     # Best tiers: three_pointer (PF 2.98, +$1135), short_range (PF 2.31, +$150)
-    # Cut: layup (PF 0.92, -$59), free_throw (PF 0.40, -$784)
-    allowed_tiers: [short_range, three_pointer]
+    # Cut: free_throw (PF 0.40, -$784)
+    # Re-enabled layup: live broker data shows 66.7% WR on MNQ, layup is top earner
+    allowed_tiers: [layup, short_range, three_pointer]
     context_assets:
       - "QQQ"    # Nasdaq ETF
       - "SPY"    # S&P 500 ETF

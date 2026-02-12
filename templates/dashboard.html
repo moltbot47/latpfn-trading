@@ -130,6 +130,8 @@
   <div class="tab" data-tab="positions">Positions</div>
   <div class="tab" data-tab="performance">Performance</div>
   <div class="tab" data-tab="backtest">Backtest</div>
+  <div class="tab" data-tab="broker">Broker P&L</div>
+  <div class="tab" data-tab="config">Config</div>
   <div class="tab" data-tab="reports">Reports</div>
   <div class="tab" data-tab="reconciliation">Reconciliation</div>
 </div>
@@ -317,6 +319,95 @@
       <div id="pred-confidence2"></div>
     </div>
 
+  </div>
+</div>
+
+<!-- ═══════════════ BROKER P&L TAB ═══════════════ -->
+<div class="tab-panel" id="tab-broker">
+  <div class="grid">
+    <div class="card">
+      <h2>Broker-Confirmed Performance (Tradovate)</h2>
+      <p style="color:var(--muted);font-size:11px;margin-bottom:12px;">Source: ~/Downloads/Performance.csv — real fill data from broker</p>
+      <div class="metric"><span class="label">Total Trades</span><span class="value" id="bp-trades">--</span></div>
+      <div class="metric"><span class="label">Total P&L</span><span class="value" id="bp-pnl">--</span></div>
+      <div class="metric"><span class="label">Win Rate</span><span class="value" id="bp-wr">--</span></div>
+      <div class="metric"><span class="label">Avg Win</span><span class="value" id="bp-avg-win">--</span></div>
+      <div class="metric"><span class="label">Avg Loss</span><span class="value" id="bp-avg-loss">--</span></div>
+      <div class="metric"><span class="label">Profit Factor</span><span class="value" id="bp-pf">--</span></div>
+      <div class="metric"><span class="label">Max Drawdown</span><span class="value" id="bp-dd">--</span></div>
+      <div class="metric"><span class="label">Peak Equity</span><span class="value" id="bp-peak">--</span></div>
+      <div class="metric"><span class="label">DD % of $2,500 Limit</span><span class="value" id="bp-dd-pct">--</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Broker P&L by Instrument</h2>
+      <table>
+        <thead><tr><th>Instrument</th><th>Trades</th><th>WR</th><th>P&L</th><th>Avg</th><th>PF</th></tr></thead>
+        <tbody id="bp-inst-body"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Broker P&L by Day</h2>
+      <table>
+        <thead><tr><th>Date</th><th>Trades</th><th>WR</th><th>P&L</th></tr></thead>
+        <tbody id="bp-day-body"></tbody>
+      </table>
+    </div>
+
+    <div class="card wide">
+      <h2>Broker Equity Curve (Real Fills)</h2>
+      <canvas id="brokerEquityChart" height="200"></canvas>
+    </div>
+
+    <div class="card wide">
+      <h2>All Broker Trades</h2>
+      <div style="max-height:400px;overflow-y:auto;">
+        <table>
+          <thead><tr><th>Instrument</th><th>Qty</th><th>Buy</th><th>Sell</th><th>P&L</th><th>Duration</th><th>Day</th></tr></thead>
+          <tbody id="bp-trades-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ CONFIG TAB ═══════════════ -->
+<div class="tab-panel" id="tab-config">
+  <div class="grid">
+    <div class="card">
+      <h2>Active Instruments</h2>
+      <table>
+        <thead><tr><th>Symbol</th><th>Name</th><th>$/Point</th><th>Allowed Tiers</th><th>Ticker</th></tr></thead>
+        <tbody id="cfg-active-body"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Disabled Instruments</h2>
+      <table>
+        <thead><tr><th>Symbol</th><th>Name</th><th>$/Point</th><th>Status</th><th>Reason</th></tr></thead>
+        <tbody id="cfg-disabled-body"></tbody>
+      </table>
+    </div>
+
+    <div class="card wide">
+      <h2>Shot Tier Profiles</h2>
+      <table>
+        <thead><tr><th>Tier</th><th>Min Conf</th><th>Target Mult</th><th>Stop Mult</th><th>Size Mult</th><th>Min R:R</th><th>Status</th></tr></thead>
+        <tbody id="cfg-tiers-body"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Risk Settings</h2>
+      <div id="cfg-risk"></div>
+    </div>
+
+    <div class="card">
+      <h2>Prop Firm Rules (Apex)</h2>
+      <div id="cfg-prop"></div>
+    </div>
   </div>
 </div>
 
@@ -513,6 +604,8 @@ document.querySelectorAll('.tab').forEach(tab => {
     if(tab.dataset.tab === 'reconciliation') refreshReconciliation();
     if(tab.dataset.tab === 'backtest') refreshBacktest();
     if(tab.dataset.tab === 'performance') { refreshPerformance(); refreshDailyHistory(); refreshInstruments(); }
+    if(tab.dataset.tab === 'broker') refreshBrokerPerformance();
+    if(tab.dataset.tab === 'config') refreshConfig();
   });
 });
 
@@ -1353,6 +1446,242 @@ function drawBacktestEquityCurves(results) {
   ctx.fillText('$0', 4, toY(0) + 4);
 }
 
+// ── Broker Performance ──────────────────────────────────────────
+async function refreshBrokerPerformance() {
+  const d = await fetchJSON('/api/broker-performance');
+  if (!d || d.error) {
+    $('bp-trades').textContent = d?.error || 'No data';
+    return;
+  }
+
+  // Summary metrics
+  $('bp-trades').textContent = d.total_trades;
+  $('bp-pnl').textContent = fmt(d.total_pnl);
+  $('bp-pnl').className = 'value ' + pnlClass(d.total_pnl);
+  $('bp-wr').textContent = d.win_rate + '%';
+  $('bp-wr').className = 'value ' + (d.win_rate >= 50 ? 'positive' : 'negative');
+  $('bp-avg-win').textContent = fmt(d.avg_win);
+  $('bp-avg-win').className = 'value positive';
+  $('bp-avg-loss').textContent = fmt(d.avg_loss);
+  $('bp-avg-loss').className = 'value negative';
+  $('bp-pf').textContent = d.profit_factor.toFixed(2);
+  $('bp-pf').className = 'value ' + (d.profit_factor >= 1 ? 'positive' : 'negative');
+  $('bp-dd').textContent = fmt(-d.max_drawdown);
+  $('bp-dd').className = 'value negative';
+  $('bp-peak').textContent = fmt(d.peak_equity);
+  $('bp-peak').className = 'value positive';
+  const ddPct = (d.max_drawdown / 2500 * 100).toFixed(1);
+  $('bp-dd-pct').textContent = ddPct + '%';
+  $('bp-dd-pct').className = 'value ' + (parseFloat(ddPct) > 60 ? 'negative' : parseFloat(ddPct) > 40 ? 'warning' : 'positive');
+
+  // Instrument breakdown
+  let instHtml = '';
+  d.instruments.forEach(i => {
+    instHtml += `<tr>
+      <td><strong>${i.instrument}</strong></td>
+      <td>${i.trades}</td>
+      <td class="${i.win_rate >= 50 ? 'positive' : 'negative'}">${i.win_rate}%</td>
+      <td class="${pnlClass(i.pnl)}">${fmt(i.pnl)}</td>
+      <td class="${pnlClass(i.avg_pnl)}">${fmt(i.avg_pnl)}</td>
+      <td class="${i.profit_factor >= 1 ? 'positive' : 'negative'}">${i.profit_factor.toFixed(2)}</td>
+    </tr>`;
+  });
+  $('bp-inst-body').innerHTML = instHtml || '<tr><td colspan="6" style="color:var(--muted)">No data</td></tr>';
+
+  // Daily breakdown
+  let dayHtml = '';
+  d.days.forEach(day => {
+    dayHtml += `<tr>
+      <td>${day.date}</td>
+      <td>${day.trades}</td>
+      <td class="${day.win_rate >= 50 ? 'positive' : 'negative'}">${day.win_rate}%</td>
+      <td class="${pnlClass(day.pnl)}">${fmt(day.pnl)}</td>
+    </tr>`;
+  });
+  $('bp-day-body').innerHTML = dayHtml || '<tr><td colspan="4" style="color:var(--muted)">No data</td></tr>';
+
+  // Equity curve chart
+  drawBrokerEquity(d.equity_curve);
+
+  // All trades table
+  let tradesHtml = '';
+  d.trades.forEach(t => {
+    tradesHtml += `<tr>
+      <td><strong>${t.instrument}</strong></td>
+      <td>${t.qty}</td>
+      <td>${t.buy_price.toFixed(2)}</td>
+      <td>${t.sell_price.toFixed(2)}</td>
+      <td class="${pnlClass(t.pnl)}">${fmt(t.pnl)}</td>
+      <td style="color:var(--muted)">${t.duration}</td>
+      <td>${t.day}</td>
+    </tr>`;
+  });
+  $('bp-trades-body').innerHTML = tradesHtml || '<tr><td colspan="7" style="color:var(--muted)">No data</td></tr>';
+}
+
+function drawBrokerEquity(curve) {
+  const canvas = $('brokerEquityChart');
+  if (!canvas || !curve || !curve.length) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth;
+  const h = 200;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+
+  const pad = 30;
+  const plotW = w - 80;
+  const plotH = h - pad * 2;
+  const allVals = [0, ...curve];
+  const min = Math.min(...allVals);
+  const max = Math.max(...allVals);
+  const range = max - min || 1;
+  const toY = v => pad + plotH - ((v - min) / range) * plotH;
+
+  // Zero line
+  ctx.strokeStyle = 'rgba(139,148,158,0.3)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4,4]);
+  ctx.beginPath(); ctx.moveTo(60, toY(0)); ctx.lineTo(w - 10, toY(0)); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Fill area
+  ctx.beginPath();
+  ctx.moveTo(60, toY(0));
+  curve.forEach((v, i) => {
+    const x = 60 + (i / (curve.length - 1 || 1)) * plotW;
+    ctx.lineTo(x, toY(v));
+  });
+  ctx.lineTo(60 + plotW, toY(0));
+  ctx.closePath();
+  const last = curve[curve.length - 1];
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  if (last >= 0) {
+    grad.addColorStop(0, 'rgba(63,185,80,0.25)');
+    grad.addColorStop(1, 'rgba(63,185,80,0.02)');
+  } else {
+    grad.addColorStop(0, 'rgba(248,81,73,0.02)');
+    grad.addColorStop(1, 'rgba(248,81,73,0.25)');
+  }
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Line
+  ctx.strokeStyle = last >= 0 ? '#3fb950' : '#f85149';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  curve.forEach((v, i) => {
+    const x = 60 + (i / (curve.length - 1 || 1)) * plotW;
+    i === 0 ? ctx.moveTo(x, toY(v)) : ctx.lineTo(x, toY(v));
+  });
+  ctx.stroke();
+
+  // End label
+  const lastX = 60 + plotW;
+  const lastY = toY(last);
+  ctx.fillStyle = last >= 0 ? '#3fb950' : '#f85149';
+  ctx.font = 'bold 11px monospace';
+  ctx.fillText(fmt(last), lastX - 60, lastY - 8);
+
+  // Y-axis labels
+  ctx.fillStyle = '#8b949e';
+  ctx.font = '10px monospace';
+  ctx.fillText(fmt(max), 4, pad + 4);
+  ctx.fillText(fmt(min), 4, h - pad + 4);
+  ctx.fillText('$0', 4, toY(0) + 4);
+
+  // Trade count
+  ctx.fillStyle = '#8b949e';
+  ctx.font = '10px monospace';
+  ctx.fillText(`${curve.length} trades`, 60, h - 4);
+}
+
+// ── System Config ───────────────────────────────────────────────
+async function refreshConfig() {
+  const d = await fetchJSON('/api/system-config');
+  if (!d || d.error) return;
+
+  // Active instruments
+  let activeHtml = '';
+  d.instruments.active.forEach(i => {
+    const tiers = i.allowed_tiers && i.allowed_tiers.length
+      ? i.allowed_tiers.map(t => `<span class="badge" style="background:rgba(88,166,255,0.15);color:var(--accent);margin-right:4px;">${t}</span>`).join('')
+      : '<span style="color:var(--muted)">all</span>';
+    activeHtml += `<tr>
+      <td><strong>${i.symbol}</strong></td>
+      <td>${i.name}</td>
+      <td>$${i.contract_size}/pt</td>
+      <td>${tiers}</td>
+      <td style="color:var(--muted)">${i.yfinance_ticker}</td>
+    </tr>`;
+  });
+  $('cfg-active-body').innerHTML = activeHtml || '<tr><td colspan="5" style="color:var(--muted)">None</td></tr>';
+
+  // Disabled instruments
+  let disabledHtml = '';
+  d.instruments.disabled.forEach(i => {
+    const statusColor = i.status === 'halted' ? 'var(--yellow)' : 'var(--red)';
+    disabledHtml += `<tr>
+      <td><strong>${i.symbol}</strong></td>
+      <td>${i.name}</td>
+      <td>$${i.contract_size}/pt</td>
+      <td><span style="color:${statusColor};font-weight:600;">${i.status.toUpperCase()}</span></td>
+      <td style="color:var(--muted)">${i.reason}</td>
+    </tr>`;
+  });
+  $('cfg-disabled-body').innerHTML = disabledHtml || '<tr><td colspan="5" style="color:var(--muted)">None</td></tr>';
+
+  // Shot tier profiles
+  let tiersHtml = '';
+  d.tiers.forEach(t => {
+    const statusBadge = t.enabled
+      ? '<span class="badge" style="background:rgba(63,185,80,0.15);color:var(--green);">ENABLED</span>'
+      : '<span class="badge" style="background:rgba(248,81,73,0.15);color:var(--red);">DISABLED</span>';
+    tiersHtml += `<tr>
+      <td><strong>${t.label}</strong></td>
+      <td>${(t.confidence_min * 100).toFixed(0)}%</td>
+      <td>${t.target_multiplier}x</td>
+      <td>${t.stop_multiplier}x</td>
+      <td>${t.size_multiplier}x</td>
+      <td>${t.min_reward_risk}:1</td>
+      <td>${statusBadge}</td>
+    </tr>`;
+  });
+  $('cfg-tiers-body').innerHTML = tiersHtml;
+
+  // Risk settings
+  const r = d.risk;
+  let riskHtml = '';
+  const riskItems = [
+    ['Max Risk / Trade', r.max_risk_per_trade_pct + '%'],
+    ['Max Position Size', r.max_position_size_contracts + ' contracts'],
+    ['Max Daily Loss', r.max_daily_loss_pct + '%'],
+    ['Max Concurrent Positions', r.max_concurrent_positions],
+    ['Stop Loss ATR Multiplier', r.stop_loss_atr_multiplier + 'x'],
+    ['Min Reward:Risk', r.min_reward_risk_ratio + ':1'],
+  ];
+  riskItems.forEach(([label, val]) => {
+    riskHtml += `<div class="metric"><span class="label">${label}</span><span class="value">${val}</span></div>`;
+  });
+  $('cfg-risk').innerHTML = riskHtml;
+
+  // Prop firm rules
+  const p = d.prop_firm;
+  let propHtml = '';
+  const propItems = [
+    ['Starting Balance', fmt(p.starting_balance)],
+    ['Max Daily Loss', fmt(p.max_daily_loss_usd)],
+    ['Max Total Drawdown', fmt(p.max_total_drawdown_usd)],
+    ['Profit Target', fmt(p.profit_target_usd)],
+  ];
+  propItems.forEach(([label, val]) => {
+    propHtml += `<div class="metric"><span class="label">${label}</span><span class="value">${val}</span></div>`;
+  });
+  $('cfg-prop').innerHTML = propHtml;
+}
+
 // ── Main Refresh ─────────────────────────────────────────────────
 async function refreshAll() {
   await Promise.all([
@@ -1368,7 +1697,10 @@ async function refreshAll() {
 }
 
 refreshAll();
+refreshBrokerPerformance();
+refreshConfig();
 setInterval(refreshAll, 15000);
+setInterval(refreshBrokerPerformance, 60000);  // broker data less frequent
 </script>
 </body>
 </html>

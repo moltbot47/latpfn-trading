@@ -1140,6 +1140,206 @@ def api_reconciliation():
     return jsonify(result)
 
 
+# ── API: Broker Performance (from Tradovate Performance.csv) ──────────
+
+PERFORMANCE_CSV = Path.home() / "Downloads" / "Performance.csv"
+
+
+@app.route("/api/broker-performance")
+def api_broker_performance():
+    """Parse Tradovate Performance.csv for real broker-confirmed P&L."""
+    csv_path = PERFORMANCE_CSV
+    if not csv_path.exists():
+        return jsonify({"error": "No Performance.csv found in ~/Downloads"})
+
+    try:
+        trades = []
+        with open(csv_path) as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                pnl_str = row["pnl"].replace("$", "").replace("(", "").replace(")", "").replace(",", "")
+                pnl = float(pnl_str)
+                if "(" in row["pnl"]:
+                    pnl = -pnl
+
+                sym = row["symbol"]
+                if sym.startswith("MNQ"):
+                    inst = "MNQ"
+                elif sym.startswith("NQ") and not sym.startswith("MNQ"):
+                    inst = "NQ"
+                elif sym.startswith("MYM"):
+                    inst = "MYM"
+                elif sym.startswith("MES"):
+                    inst = "MES"
+                elif sym.startswith("M2K"):
+                    inst = "M2K"
+                else:
+                    inst = sym[:3]
+
+                qty = int(row["qty"])
+                buy_price = float(row["buyPrice"])
+                sell_price = float(row["sellPrice"])
+                bought_ts = row["boughtTimestamp"]
+                sold_ts = row["soldTimestamp"]
+                trade_day = min(bought_ts, sold_ts)[:10]
+
+                trades.append({
+                    "instrument": inst,
+                    "qty": qty,
+                    "buy_price": buy_price,
+                    "sell_price": sell_price,
+                    "pnl": round(pnl, 2),
+                    "duration": row["duration"],
+                    "day": trade_day,
+                })
+
+        # Aggregate by instrument
+        from collections import defaultdict
+        by_inst = defaultdict(lambda: {"trades": 0, "wins": 0, "pnl": 0.0, "win_pnl": 0.0, "loss_pnl": 0.0})
+        by_day = defaultdict(lambda: {"trades": 0, "wins": 0, "pnl": 0.0})
+
+        for t in trades:
+            d = by_inst[t["instrument"]]
+            d["trades"] += 1
+            d["pnl"] += t["pnl"]
+            if t["pnl"] > 0:
+                d["wins"] += 1
+                d["win_pnl"] += t["pnl"]
+            else:
+                d["loss_pnl"] += t["pnl"]
+
+            dd = by_day[t["day"]]
+            dd["trades"] += 1
+            dd["pnl"] += t["pnl"]
+            if t["pnl"] > 0:
+                dd["wins"] += 1
+
+        instruments = []
+        for inst, s in sorted(by_inst.items()):
+            pf = round(abs(s["win_pnl"] / s["loss_pnl"]), 2) if s["loss_pnl"] else 99.0
+            instruments.append({
+                "instrument": inst,
+                "trades": s["trades"],
+                "wins": s["wins"],
+                "win_rate": round(s["wins"] / s["trades"] * 100, 1) if s["trades"] else 0,
+                "pnl": round(s["pnl"], 2),
+                "avg_pnl": round(s["pnl"] / s["trades"], 2) if s["trades"] else 0,
+                "profit_factor": pf,
+            })
+
+        days = []
+        for day, s in sorted(by_day.items()):
+            days.append({
+                "date": day,
+                "trades": s["trades"],
+                "wins": s["wins"],
+                "win_rate": round(s["wins"] / s["trades"] * 100, 1) if s["trades"] else 0,
+                "pnl": round(s["pnl"], 2),
+            })
+
+        # Risk metrics
+        running = 0.0
+        peak = 0.0
+        max_dd = 0.0
+        equity = []
+        wins = [t["pnl"] for t in trades if t["pnl"] > 0]
+        losses = [t["pnl"] for t in trades if t["pnl"] < 0]
+        for t in trades:
+            running += t["pnl"]
+            if running > peak:
+                peak = running
+            dd = peak - running
+            if dd > max_dd:
+                max_dd = dd
+            equity.append(round(running, 2))
+
+        return jsonify({
+            "total_trades": len(trades),
+            "total_pnl": round(sum(t["pnl"] for t in trades), 2),
+            "win_rate": round(len(wins) / len(trades) * 100, 1) if trades else 0,
+            "avg_win": round(sum(wins) / len(wins), 2) if wins else 0,
+            "avg_loss": round(sum(losses) / len(losses), 2) if losses else 0,
+            "profit_factor": round(sum(wins) / abs(sum(losses)), 2) if losses and sum(losses) != 0 else 99.0,
+            "max_drawdown": round(max_dd, 2),
+            "peak_equity": round(peak, 2),
+            "instruments": instruments,
+            "days": days,
+            "equity_curve": equity,
+            "trades": trades,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+
+# ── API: System Config (instruments + tiers) ─────────────────────────
+
+
+@app.route("/api/system-config")
+def api_system_config():
+    """Return current instrument and shot tier configuration."""
+    try:
+        cfg = load_config()
+    except Exception as e:
+        return jsonify({"error": str(e)})
+
+    instruments = []
+    for sym, ic in cfg.get("instruments", {}).items():
+        instruments.append({
+            "symbol": sym,
+            "name": ic.get("name", sym),
+            "contract_size": ic.get("contract_size", 0),
+            "tick_size": ic.get("tick_size", 0),
+            "tick_value": ic.get("tick_value", 0),
+            "allowed_tiers": ic.get("allowed_tiers", []),
+            "yfinance_ticker": ic.get("yfinance_ticker", ""),
+            "status": "active",
+        })
+
+    # Add disabled instruments
+    disabled = [
+        {"symbol": "M2K", "name": "Micro Russell 2000", "contract_size": 5.0, "status": "disabled", "reason": "PF 0.34, -$844 backtest"},
+        {"symbol": "MGC", "name": "Micro Gold", "contract_size": 10.0, "status": "halted", "reason": "Apex metals halt (volatility)"},
+        {"symbol": "MCL", "name": "Micro Crude Oil", "contract_size": 100.0, "status": "disabled", "reason": "0% WR, -$8,011 backtest"},
+        {"symbol": "M6E", "name": "Micro EUR/USD", "contract_size": 12500, "status": "disabled", "reason": "Broken yfinance data"},
+        {"symbol": "M6B", "name": "Micro GBP/USD", "contract_size": 6250, "status": "disabled", "reason": "Broken yfinance data"},
+    ]
+
+    tiers = []
+    for name, tc in cfg.get("shot_tiers", {}).items():
+        tiers.append({
+            "name": name,
+            "label": tc.get("label", name),
+            "confidence_min": tc.get("confidence_min", 0),
+            "target_multiplier": tc.get("target_multiplier", 1.0),
+            "stop_multiplier": tc.get("stop_multiplier", 1.0),
+            "size_multiplier": tc.get("size_multiplier", 1.0),
+            "min_reward_risk": tc.get("min_reward_risk", 1.0),
+            "enabled": tc.get("enabled", False),
+        })
+
+    risk = cfg.get("risk", {})
+    prop = risk.get("prop_firm", {})
+
+    return jsonify({
+        "instruments": {"active": instruments, "disabled": disabled},
+        "tiers": tiers,
+        "risk": {
+            "max_risk_per_trade_pct": risk.get("max_risk_per_trade_pct", 0),
+            "max_position_size_contracts": risk.get("max_position_size_contracts", 0),
+            "max_daily_loss_pct": risk.get("max_daily_loss_pct", 0),
+            "max_concurrent_positions": risk.get("max_concurrent_positions", 0),
+            "stop_loss_atr_multiplier": risk.get("stop_loss_atr_multiplier", 0),
+            "min_reward_risk_ratio": risk.get("min_reward_risk_ratio", 0),
+        },
+        "prop_firm": {
+            "starting_balance": prop.get("starting_balance", 0),
+            "max_daily_loss_usd": prop.get("max_daily_loss_usd", 0),
+            "max_total_drawdown_usd": prop.get("max_total_drawdown_usd", 0),
+            "profit_target_usd": prop.get("profit_target_usd", 0),
+        },
+    })
+
+
 # ── Main page ──────────────────────────────────────────────────────────
 
 
