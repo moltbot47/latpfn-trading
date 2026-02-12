@@ -601,6 +601,72 @@ def api_instruments():
         conn.close()
 
 
+# ── API: Backtest Results ─────────────────────────────────────────
+
+
+REPORTS_DIR = ROOT / "reports"
+
+
+@app.route("/api/backtest-results")
+def api_backtest_results():
+    """Load all backtest report JSONs from reports/ directory."""
+    if not REPORTS_DIR.exists():
+        return jsonify([])
+
+    results = []
+    config = load_config()
+
+    for f in sorted(REPORTS_DIR.glob("backtest_*.json")):
+        try:
+            with open(f) as fp:
+                report = json.load(fp)
+
+            inst = report.get("instrument", "")
+            summary = report.get("summary", {})
+            per_tier = report.get("per_tier", {})
+            equity_curve = report.get("equity_curve", [])
+
+            # Determine status
+            pf = summary.get("profit_factor", 0)
+            wr = summary.get("win_rate", 0)
+            total_pnl = summary.get("total_pnl", 0)
+
+            # Check for broken data (FX micros with absurd losses)
+            if total_pnl < -10000 or (summary.get("total_trades", 0) > 10 and wr == 0):
+                status = "bad_data"
+                status_label = "BAD DATA"
+            elif pf >= 1.1 and total_pnl > 0:
+                status = "profitable"
+                status_label = "PROFITABLE"
+            elif pf >= 0.8:
+                status = "marginal"
+                status_label = "MARGINAL"
+            else:
+                status = "losing"
+                status_label = "LOSING"
+
+            # Get instrument config
+            inst_cfg = config.get("instruments", {}).get(inst, {})
+
+            results.append({
+                "instrument": inst,
+                "name": inst_cfg.get("name", inst),
+                "file": f.name,
+                "generated_at": report.get("generated_at", ""),
+                "days": report.get("days", 0),
+                "slippage": report.get("slippage", 0),
+                "status": status,
+                "status_label": status_label,
+                "summary": summary,
+                "per_tier": per_tier,
+                "equity_curve": equity_curve,
+            })
+        except Exception:
+            continue
+
+    return jsonify(results)
+
+
 # ── API: Report Upload ────────────────────────────────────────────────
 
 

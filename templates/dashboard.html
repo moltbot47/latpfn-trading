@@ -129,6 +129,7 @@
   <div class="tab active" data-tab="overview">Overview</div>
   <div class="tab" data-tab="positions">Positions</div>
   <div class="tab" data-tab="performance">Performance</div>
+  <div class="tab" data-tab="backtest">Backtest</div>
   <div class="tab" data-tab="reports">Reports</div>
   <div class="tab" data-tab="reconciliation">Reconciliation</div>
 </div>
@@ -385,6 +386,54 @@
   </div>
 </div>
 
+<!-- ═══════════════ BACKTEST TAB ═══════════════ -->
+<div class="tab-panel" id="tab-backtest">
+  <div class="grid">
+
+    <!-- Summary Card -->
+    <div class="card wide">
+      <h2>Backtest Results — All Instruments (28 days, 5m bars, 2pt slippage)</h2>
+      <table>
+        <thead><tr>
+          <th>Instrument</th><th>Name</th><th>Status</th><th>Trades</th><th>Win Rate</th>
+          <th>Total P&L</th><th>Avg Win</th><th>Avg Loss</th><th>Profit Factor</th>
+          <th>Max DD</th><th>Return</th>
+        </tr></thead>
+        <tbody id="bt-summary-body"><tr><td colspan="11" style="color:var(--muted)">Loading...</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- Recommendation -->
+    <div class="card">
+      <h2>Recommendation</h2>
+      <div id="bt-recommendation" style="font-size:12px;line-height:1.6;"></div>
+    </div>
+
+    <!-- Aggregate Stats -->
+    <div class="card">
+      <h2>Aggregate (Profitable Only)</h2>
+      <div class="metric"><span class="label">Instruments</span><span class="value" id="bt-agg-count">--</span></div>
+      <div class="metric"><span class="label">Total Trades</span><span class="value" id="bt-agg-trades">--</span></div>
+      <div class="metric"><span class="label">Avg Win Rate</span><span class="value" id="bt-agg-wr">--</span></div>
+      <div class="metric"><span class="label">Combined P&L</span><span class="value" id="bt-agg-pnl">--</span></div>
+      <div class="metric"><span class="label">Avg Profit Factor</span><span class="value" id="bt-agg-pf">--</span></div>
+    </div>
+
+    <!-- Per-instrument detail cards (dynamically rendered) -->
+    <div class="card wide" id="bt-detail-container">
+      <h2>Per-Instrument Tier Breakdown</h2>
+      <div id="bt-detail-panels" style="display:flex;flex-wrap:wrap;gap:12px;"></div>
+    </div>
+
+    <!-- Equity Curves -->
+    <div class="card wide">
+      <h2>Backtest Equity Curves</h2>
+      <canvas id="bt-equity-canvas" style="height:220px;"></canvas>
+    </div>
+
+  </div>
+</div>
+
 <!-- ═══════════════ RECONCILIATION TAB ═══════════════ -->
 <div class="tab-panel" id="tab-reconciliation">
   <div class="grid">
@@ -450,6 +499,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     // Refresh data when switching tabs
     if(tab.dataset.tab === 'reports') refreshSnapshots();
     if(tab.dataset.tab === 'reconciliation') refreshReconciliation();
+    if(tab.dataset.tab === 'backtest') refreshBacktest();
     if(tab.dataset.tab === 'performance') { refreshPerformance(); refreshDailyHistory(); refreshInstruments(); }
   });
 });
@@ -1082,6 +1132,184 @@ function drawReconChart(days) {
   ctx.fillRect(w - 130, 18, 20, 3);
   ctx.fillStyle = '#8b949e';
   ctx.fillText('Broker', w - 105, 23);
+}
+
+// ── Backtest ─────────────────────────────────────────────────────
+async function refreshBacktest() {
+  const d = await fetchJSON('/api/backtest-results');
+  if (!d || !Array.isArray(d) || !d.length) {
+    $('bt-summary-body').innerHTML = '<tr><td colspan="11" style="color:var(--muted)">No backtest reports found. Run: python scripts/backtest.py --instrument MNQ --save-results</td></tr>';
+    return;
+  }
+
+  // Status badge colors
+  const statusColors = {
+    profitable: 'background:rgba(63,185,80,0.15);color:var(--green);',
+    marginal: 'background:rgba(210,153,34,0.15);color:var(--yellow);',
+    losing: 'background:rgba(248,81,73,0.15);color:var(--red);',
+    bad_data: 'background:rgba(139,148,158,0.15);color:var(--muted);',
+  };
+
+  // Sort: profitable first, then marginal, then losing, then bad_data
+  const order = {profitable:0, marginal:1, losing:2, bad_data:3};
+  d.sort((a,b) => (order[a.status]||9) - (order[b.status]||9));
+
+  // Summary table
+  $('bt-summary-body').innerHTML = d.map(r => {
+    const s = r.summary;
+    const sc = statusColors[r.status] || '';
+    return `<tr>
+      <td><strong>${r.instrument}</strong></td>
+      <td style="color:var(--muted);font-size:11px;">${r.name}</td>
+      <td><span class="badge" style="${sc}padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;">${r.status_label}</span></td>
+      <td>${s.total_trades}</td>
+      <td class="${s.win_rate >= 55 ? 'positive' : s.win_rate >= 45 ? 'warning' : 'negative'}">${s.win_rate}%</td>
+      <td class="${pnlClass(s.total_pnl)}">${fmt(s.total_pnl)}</td>
+      <td class="positive">${s.avg_win > 0 ? fmt(s.avg_win) : '--'}</td>
+      <td class="negative">${s.avg_loss < 0 ? fmt(s.avg_loss) : '--'}</td>
+      <td class="${s.profit_factor >= 1.5 ? 'positive' : s.profit_factor >= 1.0 ? 'warning' : 'negative'}">${s.profit_factor.toFixed(2)}</td>
+      <td class="negative">${fmt(s.max_drawdown)}</td>
+      <td class="${pnlClass(s.return_pct)}">${s.return_pct >= 0 ? '+' : ''}${s.return_pct}%</td>
+    </tr>`;
+  }).join('');
+
+  // Recommendation
+  const profitable = d.filter(r => r.status === 'profitable');
+  const marginal = d.filter(r => r.status === 'marginal');
+  const losing = d.filter(r => r.status === 'losing');
+  const badData = d.filter(r => r.status === 'bad_data');
+
+  let recHtml = '';
+  if (profitable.length) {
+    recHtml += `<div style="margin-bottom:8px;padding:8px;background:rgba(63,185,80,0.1);border:1px solid rgba(63,185,80,0.3);border-radius:6px;color:var(--green);">
+      <strong>KEEP ENABLED:</strong> ${profitable.map(r => r.instrument).join(', ')} — Profitable with PF > 1.1</div>`;
+  }
+  if (marginal.length) {
+    recHtml += `<div style="margin-bottom:8px;padding:8px;background:rgba(210,153,34,0.1);border:1px solid rgba(210,153,34,0.3);border-radius:6px;color:var(--yellow);">
+      <strong>MONITOR:</strong> ${marginal.map(r => r.instrument).join(', ')} — Breakeven, needs more data or tighter risk</div>`;
+  }
+  if (losing.length) {
+    recHtml += `<div style="margin-bottom:8px;padding:8px;background:rgba(248,81,73,0.1);border:1px solid rgba(248,81,73,0.3);border-radius:6px;color:var(--red);">
+      <strong>DISABLE:</strong> ${losing.map(r => r.instrument).join(', ')} — Model has no edge, losing money</div>`;
+  }
+  if (badData.length) {
+    recHtml += `<div style="padding:8px;background:rgba(139,148,158,0.1);border:1px solid rgba(139,148,158,0.3);border-radius:6px;color:var(--muted);">
+      <strong>BAD DATA:</strong> ${badData.map(r => r.instrument).join(', ')} — yfinance returns broken data for these FX/commodity tickers. Cannot backtest reliably.</div>`;
+  }
+  $('bt-recommendation').innerHTML = recHtml;
+
+  // Aggregate stats for profitable instruments
+  if (profitable.length) {
+    const totalTrades = profitable.reduce((s,r) => s + r.summary.total_trades, 0);
+    const combinedPnl = profitable.reduce((s,r) => s + r.summary.total_pnl, 0);
+    const avgWR = (profitable.reduce((s,r) => s + r.summary.win_rate, 0) / profitable.length);
+    const avgPF = (profitable.reduce((s,r) => s + r.summary.profit_factor, 0) / profitable.length);
+    $('bt-agg-count').textContent = profitable.length;
+    $('bt-agg-trades').textContent = totalTrades;
+    $('bt-agg-wr').textContent = `${avgWR.toFixed(1)}%`;
+    $('bt-agg-wr').className = 'value ' + (avgWR >= 50 ? 'positive' : 'warning');
+    $('bt-agg-pnl').textContent = fmt(combinedPnl);
+    $('bt-agg-pnl').className = 'value ' + pnlClass(combinedPnl);
+    $('bt-agg-pf').textContent = avgPF.toFixed(2);
+    $('bt-agg-pf').className = 'value ' + (avgPF >= 1.0 ? 'positive' : 'negative');
+  }
+
+  // Per-instrument tier panels (only for non-bad-data)
+  const validResults = d.filter(r => r.status !== 'bad_data');
+  let panelsHtml = '';
+  const tierOrder = ['layup','short_range','free_throw','three_pointer','half_court','hail_mary'];
+  for (const r of validResults) {
+    const borderColor = r.status === 'profitable' ? 'var(--green)' : r.status === 'marginal' ? 'var(--yellow)' : 'var(--red)';
+    let tierRows = '';
+    for (const tier of tierOrder) {
+      const t = r.per_tier[tier];
+      if (!t) continue;
+      tierRows += `<tr>
+        <td>${tier}</td><td>${t.count}</td>
+        <td class="${t.win_rate >= 55 ? 'positive' : t.win_rate >= 45 ? 'warning' : 'negative'}">${t.win_rate}%</td>
+        <td class="${pnlClass(t.total_pnl)}">${fmt(t.total_pnl)}</td>
+        <td>${t.profit_factor.toFixed(2)}</td>
+      </tr>`;
+    }
+    panelsHtml += `<div style="flex:1;min-width:280px;background:var(--card2);border:1px solid ${borderColor};border-radius:8px;padding:12px;">
+      <div style="font-weight:700;margin-bottom:8px;color:${borderColor};">${r.instrument} <span style="font-weight:400;font-size:11px;color:var(--muted);">— ${r.status_label}</span></div>
+      <table>
+        <thead><tr><th>Tier</th><th>Trades</th><th>WR%</th><th>P&L</th><th>PF</th></tr></thead>
+        <tbody>${tierRows || '<tr><td colspan="5" style="color:var(--muted)">No tiers</td></tr>'}</tbody>
+      </table>
+    </div>`;
+  }
+  $('bt-detail-panels').innerHTML = panelsHtml;
+
+  // Multi-line equity curves for valid instruments
+  drawBacktestEquityCurves(validResults);
+}
+
+function drawBacktestEquityCurves(results) {
+  const canvas = $('bt-equity-canvas');
+  if (!canvas || !results.length) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth;
+  const h = 220;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+
+  const colors = ['#3fb950','#58a6ff','#d29922','#f85149','#bc8cff','#39d5ff','#f0883e','#ff7b72','#7ee787'];
+  const pad = 30;
+  const plotW = w - 80;
+  const plotH = h - pad * 2;
+
+  // Find global min/max
+  let allVals = [0];
+  results.forEach(r => { if (r.equity_curve) allVals.push(...r.equity_curve); });
+  const min = Math.min(...allVals);
+  const max = Math.max(...allVals);
+  const range = max - min || 1;
+
+  const toY = v => pad + plotH - ((v - min) / range) * plotH;
+
+  // Zero line
+  ctx.strokeStyle = 'rgba(139,148,158,0.3)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4,4]);
+  ctx.beginPath(); ctx.moveTo(60, toY(0)); ctx.lineTo(w - 10, toY(0)); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Draw each instrument's curve
+  results.forEach((r, idx) => {
+    const curve = r.equity_curve;
+    if (!curve || !curve.length) return;
+    const color = colors[idx % colors.length];
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = r.status === 'profitable' ? 2.5 : 1.5;
+    if (r.status === 'losing') { ctx.setLineDash([4,3]); } else { ctx.setLineDash([]); }
+    ctx.beginPath();
+    curve.forEach((v, i) => {
+      const x = 60 + (i / (curve.length - 1 || 1)) * plotW;
+      const y = toY(v);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Label at end
+    const lastX = 60 + plotW;
+    const lastY = toY(curve[curve.length - 1]);
+    ctx.fillStyle = color;
+    ctx.font = '10px monospace';
+    ctx.fillText(`${r.instrument}`, lastX + 4, lastY + 3);
+  });
+
+  // Y-axis labels
+  ctx.fillStyle = '#8b949e';
+  ctx.font = '10px monospace';
+  ctx.fillText(`$${max.toFixed(0)}`, 4, pad + 4);
+  ctx.fillText(`$${min.toFixed(0)}`, 4, h - pad + 4);
+  ctx.fillText('$0', 4, toY(0) + 4);
 }
 
 // ── Main Refresh ─────────────────────────────────────────────────
