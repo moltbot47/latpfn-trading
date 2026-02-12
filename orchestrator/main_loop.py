@@ -559,6 +559,29 @@ class TradingSystem:
         signal = self.signal_gen.generate(instrument, prediction)
         dashboard.print_signal(instrument, signal)
 
+        # EMA trend filter — reject counter-trend signals
+        if signal is not None:
+            trend_cfg = self.config.get("signal", {}).get("trend_filter", {})
+            if trend_cfg.get("enabled", False):
+                from signals.trend_filter import compute_trend_bias, check_trend_alignment
+
+                close_prices = data["heldout_df"]["Close"].values
+                trend_bias = compute_trend_bias(
+                    close_prices,
+                    fast_period=trend_cfg.get("fast_ema_period", 50),
+                    slow_period=trend_cfg.get("slow_ema_period", 200),
+                )
+                allowed, reason = check_trend_alignment(signal.direction, trend_bias)
+                logger.info(
+                    "%s: EMA trend=%s  fast=%.2f  slow=%.2f  price=%.2f  signal=%s  %s",
+                    instrument, trend_bias["bias"],
+                    trend_bias["fast_ema"], trend_bias["slow_ema"],
+                    close_prices[-1], signal.direction,
+                    "ALLOWED" if allowed else f"BLOCKED ({reason})",
+                )
+                if not allowed:
+                    signal = None
+
         # Attach market-based regime size multiplier
         if signal is not None:
             signal.regime_size_mult = market_regime["size_multiplier"]

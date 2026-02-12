@@ -217,6 +217,11 @@ signal:
     model_confidence: 0.4
     trend_clarity: 0.3
     uncertainty_inverse: 0.3
+  trend_filter:
+    enabled: true
+    fast_ema_period: 50     # ~4 hours on 5-min bars
+    slow_ema_period: 200    # ~16 hours on 5-min bars
+    mode: gate              # gate = hard reject counter-trend signals
 
 # ── NBA Shot-Tier Classification ──────────────────────────────
 # Each tier maps a confidence range to specific trade parameters.
