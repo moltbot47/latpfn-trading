@@ -53,18 +53,19 @@ def run_backtest(
     print(f"Account: ${account_equity:,.2f}")
     print(f"{'='*60}\n")
 
-    # Fetch extended history
-    total_bars = window + days * 78  # ~78 5min bars per trading day
-    print(f"Fetching {total_bars} bars of {instrument} data...")
+    # Fetch extended history — request max available (yfinance caps at ~59 days for 5m)
+    requested_bars = window + days * 78  # ~78 5min bars per trading day
+    print(f"Fetching up to {requested_bars} bars of {instrument} data (capped by yfinance limits)...")
 
-    heldout_df = fetch_ohlcv(instrument, bars=total_bars, interval=interval)
-    print(f"Got {len(heldout_df)} bars from {heldout_df.index[0]} to {heldout_df.index[-1]}")
+    heldout_df = fetch_ohlcv(instrument, bars=requested_bars, interval=interval)
+    actual_days = (heldout_df.index[-1] - heldout_df.index[0]).days
+    print(f"Got {len(heldout_df)} bars ({actual_days} calendar days) from {heldout_df.index[0]} to {heldout_df.index[-1]}")
 
     # Fetch context assets
     context_dfs = {}
     for asset in inst_cfg["context_assets"]:
         try:
-            df = fetch_ohlcv(asset, bars=total_bars, interval=interval)
+            df = fetch_ohlcv(asset, bars=requested_bars, interval=interval)
             if len(df) >= window:
                 context_dfs[asset] = df
         except Exception as e:

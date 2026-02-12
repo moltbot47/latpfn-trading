@@ -16,11 +16,17 @@ TICKER_MAP = {
     "YM": "YM=F",
     "NQ": "NQ=F",
     "GC": "GC=F",
+    "CL": "CL=F",
     "MYM": "YM=F",
     "MNQ": "NQ=F",
     "MGC": "GC=F",
     "MES": "ES=F",
     "M2K": "RTY=F",
+    "MCL": "CL=F",
+    "M6E": "6E=F",
+    "M6B": "6B=F",
+    "M6A": "6A=F",
+    "M6J": "6J=F",
 }
 
 
@@ -101,4 +107,8 @@ def _estimate_period_days(bars: int, interval: str) -> int:
     mpb = minutes_per_bar.get(interval, 5)
     trading_minutes_per_day = 390  # ~6.5 h for US equities
     days = (bars * mpb / trading_minutes_per_day) * 1.8  # buffer for weekends/holidays
-    return max(int(days) + 1, 7)
+    result = max(int(days) + 1, 7)
+    # yfinance caps 5m data at 60 calendar days
+    if mpb <= 30:
+        result = min(result, 59)
+    return result
