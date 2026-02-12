@@ -231,6 +231,11 @@ class TradingSystem:
                 ),
             )
 
+            # ── Phase 0: Reconcile ghost positions ──
+            # Detect positions closed at broker but still in local tracking
+            if self.order_mgr.open_count > 0:
+                await self._reconcile_positions()
+
             # ── Phase 1: Scan all instruments for candidate signals ──
             candidates = []
             for instrument in self.instruments:
@@ -786,25 +791,155 @@ class TradingSystem:
         except Exception as e:
             logger.warning("Failed to restore system state: %s", e)
 
+    async def _reconcile_positions(self):
+        """Detect and remove ghost positions that the broker closed but we missed.
+
+        Three detection layers:
+          A) Price crossed past SL or TP — broker filled the exit order
+          B) Position survived past Apex flatten time — broker auto-closed it
+          C) Position older than 8 hours — almost certainly stale
+        """
+        import yfinance as yf
+
+        et = ZoneInfo("America/New_York")
+        now_et = datetime.now(et)
+        now_local = datetime.now()
+        to_remove = []  # list of (instrument, exit_price, exit_reason, reason_detail)
+
+        for inst, pos in list(self.order_mgr.open_positions.items()):
+            inst_cfg = self.config["instruments"].get(inst, {})
+            ticker = inst_cfg.get("yfinance_ticker")
+            contract_size = inst_cfg.get("contract_size", 1.0)
+            entry_time = getattr(pos, "entry_time", None)
+            age_hours = (now_local - entry_time).total_seconds() / 3600.0 if entry_time else 999
+
+            # Layer A: Check if price crossed past SL/TP
+            if ticker:
+                try:
+                    tf = yf.Ticker(ticker)
+                    hist = tf.history(period="1d", interval="1m")
+                    if hist is not None and not hist.empty:
+                        bar_high = float(hist.iloc[-1]["High"])
+                        bar_low = float(hist.iloc[-1]["Low"])
+                        bar_close = float(hist.iloc[-1]["Close"])
+                        pos.current_price = bar_close
+
+                        # Check SL breach with 0.1% tolerance
+                        sl_tol = abs(pos.stop_loss) * 0.001
+                        tp_tol = abs(pos.take_profit) * 0.001
+
+                        if pos.direction == "long":
+                            if bar_low <= pos.stop_loss + sl_tol:
+                                to_remove.append((inst, pos.stop_loss, "ghost_sl",
+                                    f"Price low {bar_low:.2f} breached SL {pos.stop_loss:.2f}"))
+                                continue
+                            if bar_high >= pos.take_profit - tp_tol:
+                                to_remove.append((inst, pos.take_profit, "ghost_tp",
+                                    f"Price high {bar_high:.2f} breached TP {pos.take_profit:.2f}"))
+                                continue
+                        else:  # short
+                            if bar_high >= pos.stop_loss - sl_tol:
+                                to_remove.append((inst, pos.stop_loss, "ghost_sl",
+                                    f"Price high {bar_high:.2f} breached SL {pos.stop_loss:.2f}"))
+                                continue
+                            if bar_low <= pos.take_profit + tp_tol:
+                                to_remove.append((inst, pos.take_profit, "ghost_tp",
+                                    f"Price low {bar_low:.2f} breached TP {pos.take_profit:.2f}"))
+                                continue
+                except Exception as e:
+                    logger.debug("Ghost reconcile price check failed for %s: %s", inst, e)
+
+            # Layer B: Post-flatten cleanup
+            # If position was opened before today's flatten (4:55 PM ET) and
+            # the flatten window has passed, broker closed it
+            if entry_time:
+                entry_et = entry_time.astimezone(et) if entry_time.tzinfo else entry_time.replace(tzinfo=et)
+                flatten_today = now_et.replace(hour=16, minute=55, second=0, microsecond=0)
+
+                # Position from a previous calendar day = definitely flattened
+                if entry_et.date() < now_et.date():
+                    exit_price = pos.current_price if pos.current_price else pos.entry_price
+                    to_remove.append((inst, exit_price, "ghost_flatten",
+                        f"Position from {entry_et.date()} — previous session, broker flattened"))
+                    continue
+
+                # Position from today but flatten time has passed
+                if entry_et < flatten_today and now_et.time() >= dtime(17, 0):
+                    exit_price = pos.current_price if pos.current_price else pos.entry_price
+                    to_remove.append((inst, exit_price, "ghost_flatten",
+                        f"Opened before 4:55 PM ET and market closed — broker flattened"))
+                    continue
+
+            # Layer C: Max age (8 hours)
+            if age_hours > 8:
+                exit_price = pos.current_price if pos.current_price else pos.entry_price
+                to_remove.append((inst, exit_price, "ghost_stale",
+                    f"Position open {age_hours:.1f} hours — exceeds 8h max"))
+                continue
+
+        # Process removals
+        for inst, exit_price, exit_reason, detail in to_remove:
+            inst_cfg = self.config["instruments"].get(inst, {})
+            cs = inst_cfg.get("contract_size", 1.0)
+
+            pnl = self.order_mgr.close_position(
+                instrument=inst,
+                exit_price=exit_price,
+                contract_size=cs,
+                exit_reason=exit_reason,
+            )
+            self.apex.update_balance(self.account_equity + pnl)
+
+            logger.warning(
+                "GHOST POSITION REMOVED: %s  exit=%.2f  reason=%s  est_pnl=$%.2f  (%s)",
+                inst, exit_price, exit_reason, pnl, detail,
+            )
+            if self.discord_bot:
+                try:
+                    await self.discord_bot._signal_channel.send(
+                        f"\U0001F47B **GHOST POSITION REMOVED** — {inst}\n"
+                        f"Reason: {detail}\n"
+                        f"Est. P&L: ${pnl:+.2f} ({exit_reason})\n"
+                        f"*Position was closed at broker but local tracking wasn't updated.*"
+                    )
+                    self._discord_fail_count = 0
+                except Exception as e:
+                    self._discord_fail_count += 1
+                    if self._discord_fail_count <= 3:
+                        logger.warning("Discord post failed (%d): %s", self._discord_fail_count, e)
+
     async def _check_stale_positions(self):
-        """Warn about positions that have been open for more than 24 hours."""
+        """Auto-remove positions that have been open for more than 24 hours."""
         now = datetime.now()
         stale_threshold_hours = 24
-        for inst, pos in self.order_mgr.open_positions.items():
+        for inst, pos in list(self.order_mgr.open_positions.items()):
             entry_time = getattr(pos, "entry_time", None)
             if entry_time is None:
                 continue
             age_hours = (now - entry_time).total_seconds() / 3600.0
             if age_hours > stale_threshold_hours:
+                inst_cfg = self.config["instruments"].get(inst, {})
+                cs = inst_cfg.get("contract_size", 1.0)
+                exit_price = pos.current_price if pos.current_price else pos.entry_price
+
+                pnl = self.order_mgr.close_position(
+                    instrument=inst,
+                    exit_price=exit_price,
+                    contract_size=cs,
+                    exit_reason="stale_24h",
+                )
+                self.apex.update_balance(self.account_equity + pnl)
+
                 logger.warning(
-                    "STALE POSITION: %s has been open %.1f hours (since %s)",
-                    inst, age_hours, entry_time.isoformat(),
+                    "STALE POSITION AUTO-REMOVED: %s open %.1f hours  est_pnl=$%.2f",
+                    inst, age_hours, pnl,
                 )
                 if self.discord_bot:
                     try:
                         await self.discord_bot._signal_channel.send(
-                            f"**STALE POSITION WARNING** — {inst} has been open "
-                            f"for {age_hours:.1f} hours (since {entry_time.strftime('%Y-%m-%d %H:%M')})"
+                            f"\U0001F47B **STALE POSITION AUTO-REMOVED** — {inst}\n"
+                            f"Open for {age_hours:.1f} hours (since {entry_time.strftime('%Y-%m-%d %H:%M')})\n"
+                            f"Est. P&L: ${pnl:+.2f}"
                         )
                         self._discord_fail_count = 0
                     except Exception as e:
