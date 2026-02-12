@@ -270,7 +270,7 @@ shot_tiers:
     stop_multiplier: 1.5
     size_multiplier: 0.25      # quarter position
     min_reward_risk: 3.0
-    enabled: false             # disabled by default — enable after backtest validates
+    enabled: true
 
   hail_mary:
     label: "Hail Mary"

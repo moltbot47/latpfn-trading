@@ -34,6 +34,8 @@ DEFAULT_PROFIT_CONFIG = {
     "close_pct": 0.90,             # 90% of TP target reached
     "min_hold_minutes": 15,        # Minimum hold time before tightening
     "slot_free_min_profit_pct": 0.25,  # Must be 25%+ toward TP to close for slot
+    "trailing_stop_activation_pct": 0.50,  # Activate trail at 50% of TP
+    "trailing_stop_distance_pct": 0.40,    # Trail distance = 40% of total TP target
 }
 
 
@@ -156,6 +158,57 @@ def _evaluate_position(
         hold_minutes = (datetime.now() - pos.entry_time).total_seconds() / 60.0
     except Exception:
         hold_minutes = 0.0
+
+    # ── Trailing stop logic ───────────────────────────────────────
+    trail_activation = cfg.get("trailing_stop_activation_pct", 0.50)
+    trail_distance_pct = cfg.get("trailing_stop_distance_pct", 0.40)
+    trail_distance = abs(tp_target_points) * trail_distance_pct
+
+    if pnl_pct_of_target >= trail_activation and not pos.trailing_stop_active:
+        # Activate trailing stop
+        pos.trailing_stop_active = True
+        pos.best_price = current_price
+        if pos.direction == "long":
+            pos.trailing_stop_level = current_price - trail_distance
+        else:
+            pos.trailing_stop_level = current_price + trail_distance
+        logger.info(
+            "TRAILING STOP ACTIVATED: %s at %.2f (trail=%.2f pts, level=%.2f)",
+            pos.instrument, current_price, trail_distance, pos.trailing_stop_level,
+        )
+
+    if pos.trailing_stop_active:
+        # Update best price and ratchet the trailing stop
+        if pos.direction == "long":
+            if current_price > pos.best_price:
+                pos.best_price = current_price
+                pos.trailing_stop_level = current_price - trail_distance
+            # Check if trailing stop hit
+            if current_price <= pos.trailing_stop_level:
+                return _build_action(
+                    pos, "trailing_stop_close", current_price, pnl_pct_of_target, pnl_dollars,
+                    reason=(
+                        f"Trailing stop hit: price {current_price:.2f} fell below "
+                        f"trail level {pos.trailing_stop_level:.2f} "
+                        f"(best: {pos.best_price:.2f}, trail: {trail_distance:.2f} pts). "
+                        f"Locking in ${pnl_dollars:+.2f} est. profit."
+                    ),
+                )
+        else:  # short
+            if current_price < pos.best_price:
+                pos.best_price = current_price
+                pos.trailing_stop_level = current_price + trail_distance
+            # Check if trailing stop hit
+            if current_price >= pos.trailing_stop_level:
+                return _build_action(
+                    pos, "trailing_stop_close", current_price, pnl_pct_of_target, pnl_dollars,
+                    reason=(
+                        f"Trailing stop hit: price {current_price:.2f} rose above "
+                        f"trail level {pos.trailing_stop_level:.2f} "
+                        f"(best: {pos.best_price:.2f}, trail: {trail_distance:.2f} pts). "
+                        f"Locking in ${pnl_dollars:+.2f} est. profit."
+                    ),
+                )
 
     # ── Decision logic (highest priority first) ──────────────────
 

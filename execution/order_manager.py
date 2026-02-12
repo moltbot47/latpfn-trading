@@ -26,10 +26,13 @@ class Position:
     entry_time: datetime = field(default_factory=datetime.now)
     current_price: float = 0.0
     trade_log_id: Optional[int] = None
+    trailing_stop_active: bool = False
+    trailing_stop_level: float = 0.0
+    best_price: float = 0.0  # best price seen since entry (for trailing)
 
     def to_dict(self) -> dict:
         """Serialize to a JSON-compatible dictionary."""
-        return {
+        d = {
             "instrument": self.instrument,
             "direction": self.direction,
             "size": self.size,
@@ -41,11 +44,16 @@ class Position:
             "current_price": self.current_price,
             "trade_log_id": self.trade_log_id,
         }
+        if self.trailing_stop_active:
+            d["trailing_stop_active"] = True
+            d["trailing_stop_level"] = self.trailing_stop_level
+            d["best_price"] = self.best_price
+        return d
 
     @classmethod
     def from_dict(cls, data: dict) -> "Position":
         """Deserialize from a dictionary."""
-        return cls(
+        pos = cls(
             instrument=data["instrument"],
             direction=data["direction"],
             size=data["size"],
@@ -59,6 +67,10 @@ class Position:
             current_price=data.get("current_price", 0.0),
             trade_log_id=data.get("trade_log_id"),
         )
+        pos.trailing_stop_active = data.get("trailing_stop_active", False)
+        pos.trailing_stop_level = data.get("trailing_stop_level", 0.0)
+        pos.best_price = data.get("best_price", 0.0)
+        return pos
 
     @property
     def unrealized_pnl_points(self) -> float:

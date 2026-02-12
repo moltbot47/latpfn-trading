@@ -345,6 +345,47 @@ class TradingSystem:
                                     elif self._discord_fail_count == 4:
                                         logger.error("Discord appears disconnected — alerts not being delivered")
 
+                        elif pa["action"] == "trailing_stop_close":
+                            # Trailing stop triggered — close via webhook
+                            webhook_ok = True
+                            if self.executor:
+                                exec_sym = self._contract_cache.get(inst, inst_cfg.get("tradovate_symbol", inst))
+                                close_result = await self.executor.close_position(exec_sym)
+                                if close_result is None:
+                                    webhook_ok = False
+                                    logger.error(
+                                        "TRAILING STOP CLOSE WEBHOOK FAILED for %s — will retry next cycle.",
+                                        inst,
+                                    )
+
+                            if not webhook_ok:
+                                continue
+
+                            pnl = self.order_mgr.close_position(
+                                instrument=inst,
+                                exit_price=pa["current_price"],
+                                contract_size=cs,
+                                exit_reason="trailing_stop",
+                            )
+                            self.apex.update_balance(self.account_equity + pnl)
+                            logger.info(
+                                "TRAILING STOP CLOSE %s @ %.2f  Est P&L: $%.2f  (%s)",
+                                inst, pa["current_price"], pnl, pa["reason"],
+                            )
+                            if self.discord_bot:
+                                try:
+                                    await self.discord_bot._signal_channel.send(
+                                        f"\U0001F3AF **TRAILING STOP** {inst} "
+                                        f"@ {pa['current_price']:.2f}  |  "
+                                        f"Est. P&L: ${pnl:+.2f}\n"
+                                        f"*{pa['reason']}*"
+                                    )
+                                    self._discord_fail_count = 0
+                                except Exception as e:
+                                    self._discord_fail_count += 1
+                                    if self._discord_fail_count <= 3:
+                                        logger.warning("Discord post failed (%d): %s", self._discord_fail_count, e)
+
                         elif pa["action"] == "tighten_stop":
                             # Can't modify stops via PickMyTrade webhook —
                             # notify user and update local tracking only
@@ -372,6 +413,9 @@ class TradingSystem:
                                         logger.warning("Discord post failed (%d): %s", self._discord_fail_count, e)
                                     elif self._discord_fail_count == 4:
                                         logger.error("Discord appears disconnected — alerts not being delivered")
+                    # Persist trailing stop state changes even when no close happened
+                    if any(pa["action"] not in ("close", "trailing_stop_close") for pa in profit_actions):
+                        self.order_mgr._save_state()
                 except Exception as e:
                     logger.error("Profit-taking check failed: %s", e)
 
