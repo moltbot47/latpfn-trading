@@ -33,9 +33,9 @@ instruments:
     contract_size: 0.50     # $0.50 per point (1/10th of YM)
     tick_size: 1.0
     tick_value: 0.50
-    # Backtest 02/12: 56 trades, 48.2% WR, +$90, PF 1.07
-    # Winners: three_pointer (PF 10.49, +$299), half_court (PF 4.54, +$405)
-    # Losers: layup (PF 0.67), short_range (PF 0.78), free_throw (PF 0.60), hail_mary (PF 0.09)
+    # Backtest 02/12 confirmation: 26 trades, 34.6% WR, -$452, PF 0.45
+    # Both tiers losing in isolation: three_pointer (PF 0.25), half_court (PF 0.84)
+    # WARNING: MYM model has weak/inconsistent edge — monitor closely
     allowed_tiers: [three_pointer, half_court]
     context_assets:
       - "SPY"    # S&P 500 ETF
@@ -54,11 +54,10 @@ instruments:
     contract_size: 2        # $2 per point (1/10th of NQ)
     tick_size: 0.25
     tick_value: 0.50
-    # Backtest 02/12: 54 trades, 51.9% WR, +$2097, PF 1.58
-    # Winners: short_range (PF 5.60), free_throw (PF 4.66), layup (PF 2.03), half_court (PF 1.75), three_pointer (PF 1.28)
-    # Losers: hail_mary (PF 0.25, -$839)
-    # Re-enabled free_throw + half_court based on fresh backtest data
-    allowed_tiers: [layup, short_range, free_throw, three_pointer, half_court]
+    # Backtest 02/12: 41 trades, PF 1.56, +$1538
+    # Winners: layup, short_range, free_throw, three_pointer
+    # half_court confirmed 0% WR, -$1087 in confirmation run — removed
+    allowed_tiers: [layup, short_range, free_throw, three_pointer]
     context_assets:
       - "QQQ"    # Nasdaq ETF
       - "SPY"    # S&P 500 ETF
@@ -76,11 +75,10 @@ instruments:
     contract_size: 5.0        # $5 per point (1/10th of ES)
     tick_size: 0.25
     tick_value: 1.25
-    # Backtest 02/12: 54 trades, 59.3% WR, +$1438, PF 1.80
-    # Winners: short_range (PF 4.28), layup (PF 2.29, 75% WR), three_pointer (PF 2.01), free_throw (PF 1.67)
-    # Losers: half_court (PF 0.98), hail_mary (PF 1.21 but tiny sample)
-    # Re-enabled layup + free_throw based on fresh backtest data
-    allowed_tiers: [layup, short_range, free_throw, three_pointer]
+    # Backtest 02/12: 37 trades, 43.2% WR, +$383, PF 1.27
+    # Winners: short_range (PF 3.22), layup (PF 1.21), three_pointer (PF 1.07)
+    # free_throw confirmed PF 0.62, -$86 in confirmation run — removed
+    allowed_tiers: [layup, short_range, three_pointer]
     context_assets:
       - "SPY"    # S&P 500 ETF
       - "DIA"    # Dow ETF
