@@ -247,8 +247,8 @@
     <div class="card wide">
       <h2>Recent Trades (Last 50)</h2>
       <table>
-        <thead><tr><th>Time</th><th>Instrument</th><th>Dir</th><th>Tier</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Reason</th><th>Duration</th><th>Status</th></tr></thead>
-        <tbody id="trades-body"><tr><td colspan="10" style="color:var(--muted)">Loading...</td></tr></tbody>
+        <thead><tr><th>Time</th><th>Instrument</th><th>Dir</th><th>Tier</th><th>Entry</th><th>Exit</th><th>Points</th><th>P&L</th><th>Reason</th><th>Duration</th><th>Status</th></tr></thead>
+        <tbody id="trades-body"><tr><td colspan="11" style="color:var(--muted)">Loading...</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -271,6 +271,18 @@
         <thead><tr><th>Tier</th><th>Trades</th><th>Wins</th><th>WR%</th><th>P&L</th><th>Avg</th><th>PF</th></tr></thead>
         <tbody id="tier-body"><tr><td colspan="7" style="color:var(--muted)">Loading...</td></tr></tbody>
       </table>
+    </div>
+
+    <!-- Points Performance -->
+    <div class="card">
+      <h2>Points Performance</h2>
+      <div class="metric"><span class="label">Net Points</span><span class="value" id="pts-net">--</span></div>
+      <div class="metric"><span class="label">Avg Points/Trade</span><span class="value" id="pts-avg">--</span></div>
+      <div class="metric"><span class="label">Avg Win (pts)</span><span class="value" id="pts-avg-win">--</span></div>
+      <div class="metric"><span class="label">Avg Loss (pts)</span><span class="value" id="pts-avg-loss">--</span></div>
+      <div class="metric"><span class="label">Total Won (pts)</span><span class="value" id="pts-total-won">--</span></div>
+      <div class="metric"><span class="label">Total Lost (pts)</span><span class="value" id="pts-total-lost">--</span></div>
+      <div id="pts-by-inst" style="margin-top:10px;"></div>
     </div>
 
     <!-- Exit Reasons -->
@@ -657,6 +669,33 @@ async function refreshPerformance() {
   }
   $('exit-reasons').innerHTML = exitHtml || '<div style="color:var(--muted)">No exits yet</div>';
 
+  // Points performance
+  const pts = d.points;
+  if (pts) {
+    $('pts-net').textContent = pts.total_points >= 0 ? `+${pts.total_points.toFixed(2)}` : pts.total_points.toFixed(2);
+    $('pts-net').className = 'value ' + pnlClass(pts.total_points);
+    $('pts-avg').textContent = (pts.avg_points >= 0 ? '+' : '') + pts.avg_points.toFixed(2);
+    $('pts-avg').className = 'value ' + pnlClass(pts.avg_points);
+    $('pts-avg-win').textContent = '+' + pts.avg_win_points.toFixed(2);
+    $('pts-avg-win').className = 'value positive';
+    $('pts-avg-loss').textContent = pts.avg_loss_points.toFixed(2);
+    $('pts-avg-loss').className = 'value negative';
+    $('pts-total-won').textContent = '+' + pts.total_won_points.toFixed(2);
+    $('pts-total-won').className = 'value positive';
+    $('pts-total-lost').textContent = pts.total_lost_points.toFixed(2);
+    $('pts-total-lost').className = 'value negative';
+
+    // Per-instrument points
+    let instPtsHtml = '<div style="font-size:11px;color:var(--muted);margin-bottom:4px;">By Instrument:</div>';
+    for (const [inst, v] of Object.entries(pts.by_instrument || {})) {
+      instPtsHtml += `<div class="metric">
+        <span class="label">${inst} (${v.count})</span>
+        <span class="value ${pnlClass(v.net)}">${v.net >= 0 ? '+' : ''}${v.net.toFixed(2)} pts</span>
+      </div>`;
+    }
+    $('pts-by-inst').innerHTML = instPtsHtml;
+  }
+
   // Equity curves
   drawEquityCurve(d.equity_curve || [], 'equity-canvas', 140);
   drawEquityCurve(d.equity_curve || [], 'equity-canvas2', 200);
@@ -742,6 +781,7 @@ async function refreshTrades() {
   }
   $('trades-body').innerHTML = d.map(t => {
     const pnl = t.pnl_dollars || 0;
+    const pts = t.points;
     const dur = t.time_in_trade_minutes ? `${t.time_in_trade_minutes.toFixed(0)}m` : '--';
     const ts = t.timestamp ? t.timestamp.substring(5, 16) : '--';
     return `<tr>
@@ -751,6 +791,7 @@ async function refreshTrades() {
       <td>${t.shot_tier || '--'}</td>
       <td>${t.entry_price ? t.entry_price.toFixed(2) : '--'}</td>
       <td>${t.exit_price ? t.exit_price.toFixed(2) : '--'}</td>
+      <td class="${pts != null ? pnlClass(pts) : 'neutral'}">${pts != null ? (pts >= 0 ? '+' : '') + pts.toFixed(2) : '--'}</td>
       <td class="${pnlClass(pnl)}">${pnl ? fmt(pnl) : '--'}</td>
       <td>${t.exit_reason || (t.execution_status === 'executed' ? 'open' : t.execution_status)}</td>
       <td>${dur}</td>

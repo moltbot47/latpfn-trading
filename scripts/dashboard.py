@@ -293,7 +293,8 @@ def api_performance():
 
     try:
         rows = conn.execute(
-            "SELECT pnl_dollars, shot_tier, exit_reason, direction, execution_status "
+            "SELECT pnl_dollars, shot_tier, exit_reason, direction, execution_status, "
+            "entry_price, exit_price, contract_size, instrument "
             "FROM trades WHERE execution_status='executed' AND pnl_dollars IS NOT NULL "
             "ORDER BY timestamp"
         ).fetchall()
@@ -347,6 +348,45 @@ def api_performance():
         longs = [r["pnl_dollars"] for r in rows if r["direction"] == "long"]
         shorts = [r["pnl_dollars"] for r in rows if r["direction"] == "short"]
 
+        # Points-based analysis (contract-size-neutral)
+        points_list = []
+        points_by_inst = {}
+        for r in rows:
+            ep = r["entry_price"] or 0
+            xp = r["exit_price"] or 0
+            if ep and xp:
+                pts = (xp - ep) if r["direction"] == "long" else (ep - xp)
+                points_list.append(round(pts, 4))
+                inst = r["instrument"] or "unknown"
+                if inst not in points_by_inst:
+                    points_by_inst[inst] = {"won": 0.0, "lost": 0.0, "count": 0}
+                points_by_inst[inst]["count"] += 1
+                if pts > 0:
+                    points_by_inst[inst]["won"] += pts
+                else:
+                    points_by_inst[inst]["lost"] += abs(pts)
+
+        won_pts = [p for p in points_list if p > 0]
+        lost_pts = [p for p in points_list if p <= 0]
+
+        points_stats = {
+            "total_points": round(sum(points_list), 4),
+            "avg_points": round(sum(points_list) / len(points_list), 4) if points_list else 0,
+            "avg_win_points": round(sum(won_pts) / len(won_pts), 4) if won_pts else 0,
+            "avg_loss_points": round(sum(lost_pts) / len(lost_pts), 4) if lost_pts else 0,
+            "total_won_points": round(sum(won_pts), 4),
+            "total_lost_points": round(sum(p for p in points_list if p < 0), 4),
+            "by_instrument": {
+                inst: {
+                    "count": v["count"],
+                    "won": round(v["won"], 2),
+                    "lost": round(v["lost"], 2),
+                    "net": round(v["won"] - v["lost"], 2),
+                }
+                for inst, v in sorted(points_by_inst.items())
+            },
+        }
+
         return jsonify({
             "total_trades": len(pnls),
             "win_rate": round(len(wins) / len(pnls) * 100, 1),
@@ -363,6 +403,7 @@ def api_performance():
             "short_pnl": round(sum(shorts), 2),
             "long_count": len(longs),
             "short_count": len(shorts),
+            "points": points_stats,
         })
     except Exception as e:
         return jsonify({"error": str(e)})
@@ -382,11 +423,25 @@ def api_recent_trades():
     try:
         rows = conn.execute(
             "SELECT timestamp, instrument, direction, shot_tier, entry_price, "
-            "stop_loss, take_profit, position_size, pnl_dollars, exit_reason, "
+            "stop_loss, take_profit, position_size, contract_size, pnl_dollars, exit_reason, "
             "exit_price, time_in_trade_minutes, execution_status "
             "FROM trades ORDER BY timestamp DESC LIMIT 50"
         ).fetchall()
-        return jsonify([dict(r) for r in rows])
+        result = []
+        for r in rows:
+            d = dict(r)
+            # Calculate points (price movement regardless of contract size)
+            ep = d.get("entry_price") or 0
+            xp = d.get("exit_price") or 0
+            if ep and xp:
+                if d.get("direction") == "long":
+                    d["points"] = round(xp - ep, 4)
+                else:
+                    d["points"] = round(ep - xp, 4)
+            else:
+                d["points"] = None
+            result.append(d)
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)})
     finally:
@@ -730,9 +785,175 @@ def api_delete_snapshot(snap_id):
         conn.close()
 
 
+def _parse_tradovate_orders(content: str) -> dict:
+    """Parse Tradovate Orders CSV into matched round-trip trades using FIFO.
+
+    Reads all Filled orders, tracks positions per product, and matches
+    entries with exits to compute per-trade P&L in both points and dollars.
+    """
+    reader = csv.DictReader(io.StringIO(content))
+
+    # Contract $ per point multipliers
+    CONTRACT_MULT = {
+        "MNQ": 2.0, "NQ": 20.0, "MYM": 0.50, "YM": 5.0,
+        "MES": 5.0, "ES": 50.0, "M2K": 5.0, "RTY": 50.0,
+        "MGC": 10.0, "GC": 100.0, "MCL": 100.0, "CL": 1000.0,
+        "M6E": 12500, "M6B": 6250, "M6A": 10000, "M6J": 1250000,
+    }
+
+    # Extract filled orders
+    fills = []
+    for row in reader:
+        status = (row.get("Status") or "").strip()
+        if status != "Filled":
+            continue
+        price_str = row.get("avgPrice") or row.get("Avg Fill Price") or "0"
+        qty_str = row.get("filledQty") or row.get("Filled Qty") or "0"
+        try:
+            price = float(str(price_str).replace(",", ""))
+            qty = int(float(str(qty_str).replace(",", "")))
+        except (ValueError, TypeError):
+            continue
+        if qty == 0 or price == 0:
+            continue
+        fills.append({
+            "timestamp": (row.get("Fill Time") or row.get("Timestamp") or "").strip(),
+            "product": (row.get("Product") or "").strip(),
+            "contract": (row.get("Contract") or "").strip(),
+            "side": (row.get("B/S") or "").strip(),
+            "price": price,
+            "qty": qty,
+            "order_id": (row.get("orderId") or row.get("Order ID") or "").strip(),
+            "text": (row.get("Text") or "").strip(),
+        })
+
+    fills.sort(key=lambda x: x["timestamp"])
+
+    # FIFO position tracking per product
+    positions = {}
+    matched_trades = []
+
+    for fill in fills:
+        product = fill["product"]
+        side = fill["side"]
+        qty = fill["qty"]
+        price = fill["price"]
+
+        if product not in positions:
+            positions[product] = {"qty": 0, "side": "", "avg_price": 0.0, "entry_time": ""}
+
+        pos = positions[product]
+
+        if pos["qty"] == 0:
+            # Open new position
+            pos["qty"] = qty
+            pos["side"] = side
+            pos["avg_price"] = price
+            pos["entry_time"] = fill["timestamp"]
+        elif pos["side"] == side:
+            # Adding to existing position (weighted average)
+            total = pos["qty"] + qty
+            pos["avg_price"] = (pos["avg_price"] * pos["qty"] + price * qty) / total
+            pos["qty"] = total
+        else:
+            # Closing or flipping
+            close_qty = min(pos["qty"], qty)
+            remaining_new = qty - close_qty
+
+            if pos["side"] == "Buy":
+                direction = "long"
+                pnl_points = price - pos["avg_price"]
+            else:
+                direction = "short"
+                pnl_points = pos["avg_price"] - price
+
+            mult = CONTRACT_MULT.get(product, 1.0)
+            pnl_dollars = pnl_points * close_qty * mult
+
+            exit_type = fill["text"] if fill["text"] else ("stop" if "Stop" in fill.get("order_id", "") else "close")
+
+            matched_trades.append({
+                "product": product,
+                "contract": fill["contract"],
+                "direction": direction,
+                "qty": close_qty,
+                "entry_price": round(pos["avg_price"], 4),
+                "exit_price": round(price, 4),
+                "entry_time": pos["entry_time"],
+                "exit_time": fill["timestamp"],
+                "points": round(pnl_points, 4),
+                "pnl_dollars": round(pnl_dollars, 2),
+                "exit_type": exit_type,
+            })
+
+            pos["qty"] -= close_qty
+            if pos["qty"] == 0 and remaining_new > 0:
+                pos["qty"] = remaining_new
+                pos["side"] = side
+                pos["avg_price"] = price
+                pos["entry_time"] = fill["timestamp"]
+            elif pos["qty"] == 0:
+                pos["side"] = ""
+                pos["avg_price"] = 0.0
+                pos["entry_time"] = ""
+
+    # Summary stats
+    total_pnl = sum(t["pnl_dollars"] for t in matched_trades)
+    wins = [t for t in matched_trades if t["pnl_dollars"] > 0]
+    losses = [t for t in matched_trades if t["pnl_dollars"] <= 0]
+    open_pos = {p: v for p, v in positions.items() if v["qty"] > 0}
+
+    # Per-instrument breakdown
+    by_inst = {}
+    for t in matched_trades:
+        p = t["product"]
+        if p not in by_inst:
+            by_inst[p] = {"trades": 0, "wins": 0, "pnl": 0.0, "points": 0.0}
+        by_inst[p]["trades"] += 1
+        by_inst[p]["pnl"] += t["pnl_dollars"]
+        by_inst[p]["points"] += t["points"] * t["qty"]
+        if t["pnl_dollars"] > 0:
+            by_inst[p]["wins"] += 1
+
+    # Per-day breakdown
+    by_day = {}
+    for t in matched_trades:
+        # Use exit_time date as the trade date
+        day = t["exit_time"][:10] if t["exit_time"] else "unknown"
+        # Normalize date format (MM/DD/YYYY → YYYY-MM-DD)
+        if "/" in day:
+            parts = day.split("/")
+            if len(parts) == 3:
+                day = f"{parts[2]}-{parts[0].zfill(2)}-{parts[1].zfill(2)}"
+        if day not in by_day:
+            by_day[day] = {"trades": 0, "wins": 0, "pnl": 0.0}
+        by_day[day]["trades"] += 1
+        by_day[day]["pnl"] += t["pnl_dollars"]
+        if t["pnl_dollars"] > 0:
+            by_day[day]["wins"] += 1
+
+    return {
+        "total_fills": len(fills),
+        "matched_trades": matched_trades,
+        "open_positions": {p: {"qty": v["qty"], "side": v["side"], "avg_price": round(v["avg_price"], 4)}
+                          for p, v in open_pos.items()},
+        "by_instrument": {p: {**v, "pnl": round(v["pnl"], 2), "points": round(v["points"], 2)}
+                          for p, v in sorted(by_inst.items())},
+        "by_day": {d: {**v, "pnl": round(v["pnl"], 2)} for d, v in sorted(by_day.items())},
+        "summary": {
+            "total_trades": len(matched_trades),
+            "wins": len(wins),
+            "losses": len(losses),
+            "win_rate": round(len(wins) / len(matched_trades) * 100, 1) if matched_trades else 0,
+            "total_pnl": round(total_pnl, 2),
+            "avg_pnl": round(total_pnl / len(matched_trades), 2) if matched_trades else 0,
+        },
+    }
+
+
 @app.route("/api/reports/upload-csv", methods=["POST"])
 def api_upload_csv():
-    """Upload a Tradovate trade history CSV."""
+    """Upload a Tradovate Orders CSV — matches entries with exits via FIFO."""
     if "file" not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
 
@@ -740,41 +961,24 @@ def api_upload_csv():
     if not file.filename.endswith(".csv"):
         return jsonify({"error": "Must be a CSV file"}), 400
 
-    report_date = request.form.get("report_date", date.today().isoformat())
-
     try:
         content = file.read().decode("utf-8")
-        reader = csv.DictReader(io.StringIO(content))
+
+        # Parse and match trades
+        parsed = _parse_tradovate_orders(content)
+        matched = parsed["matched_trades"]
+        summary = parsed["summary"]
 
         conn = _get_report_db()
-        # Clear existing trades for this date
-        conn.execute("DELETE FROM broker_trades WHERE report_date=?", (report_date,))
 
-        imported = 0
-        for row in reader:
-            # Flexible column mapping for Tradovate exports
-            instrument = (
-                row.get("Product") or row.get("Symbol") or row.get("Contract")
-                or row.get("product") or row.get("symbol") or row.get("instrument") or ""
-            )
-            direction = (
-                row.get("Buy/Sell") or row.get("Side") or row.get("Action")
-                or row.get("buy/sell") or row.get("side") or row.get("direction") or ""
-            )
-            if direction.lower() in ("buy", "long"):
-                direction = "long"
-            elif direction.lower() in ("sell", "short"):
-                direction = "short"
-
-            def _float(key):
-                for k in [key, key.lower(), key.replace(" ", ""), key.title()]:
-                    val = row.get(k)
-                    if val:
-                        try:
-                            return float(str(val).replace(",", "").replace("$", ""))
-                        except ValueError:
-                            pass
-                return None
+        # Store each matched round-trip trade
+        for t in matched:
+            # Use exit date as report_date
+            exit_day = t["exit_time"][:10] if t["exit_time"] else date.today().isoformat()
+            if "/" in exit_day:
+                parts = exit_day.split("/")
+                if len(parts) == 3:
+                    exit_day = f"{parts[2]}-{parts[0].zfill(2)}-{parts[1].zfill(2)}"
 
             conn.execute(
                 "INSERT INTO broker_trades "
@@ -782,26 +986,48 @@ def api_upload_csv():
                 "entry_price, exit_price, pnl, commission, order_id, raw_symbol) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
-                    report_date,
-                    row.get("Fill Time") or row.get("Time") or row.get("Date") or row.get("timestamp") or "",
-                    instrument,
-                    direction,
-                    _float("Qty") or _float("Quantity") or _float("quantity"),
-                    _float("Avg Fill Price") or _float("Entry Price") or _float("entry_price"),
-                    _float("Exit Price") or _float("exit_price"),
-                    _float("Realized P&L") or _float("P&L") or _float("pnl") or _float("Realized P/L"),
-                    _float("Commission") or _float("commission") or 0,
-                    row.get("Order ID") or row.get("order_id") or "",
-                    row.get("Contract") or row.get("Symbol") or "",
+                    exit_day,
+                    t["exit_time"],
+                    t["product"],
+                    t["direction"],
+                    t["qty"],
+                    t["entry_price"],
+                    t["exit_price"],
+                    t["pnl_dollars"],
+                    0,
+                    "",
+                    t["contract"],
                 ),
             )
-            imported += 1
+
+        # Auto-create broker snapshots per day
+        for day_str, day_stats in parsed["by_day"].items():
+            conn.execute(
+                "INSERT OR REPLACE INTO broker_snapshots "
+                "(report_date, actual_pnl_today, actual_trades_today, notes) "
+                "VALUES (?, ?, ?, ?)",
+                (
+                    day_str,
+                    day_stats["pnl"],
+                    day_stats["trades"],
+                    f"Auto-imported from Tradovate CSV: {day_stats['wins']}W/{day_stats['trades']-day_stats['wins']}L",
+                ),
+            )
 
         conn.commit()
         conn.close()
-        return jsonify({"status": "ok", "imported": imported, "date": report_date})
+
+        return jsonify({
+            "status": "ok",
+            "matched_trades": len(matched),
+            "summary": summary,
+            "by_instrument": parsed["by_instrument"],
+            "by_day": parsed["by_day"],
+            "open_positions": parsed["open_positions"],
+        })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        import traceback
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
 
 
 @app.route("/api/reports/trades")
