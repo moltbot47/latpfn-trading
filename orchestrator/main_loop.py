@@ -289,10 +289,14 @@ class TradingSystem:
                         for c in overflow
                     ] if overflow else None
 
+                    strategy_mode = self.config.get("strategy", {}).get("mode", "standard")
+                    scalp_cfg = self.config.get("strategy", {}).get("scalp", {})
                     profit_actions = check_profit_actions(
                         open_positions=self.order_mgr.open_positions,
                         instruments_config=self.config["instruments"],
                         pending_signals=pending_for_slots,
+                        strategy_mode=strategy_mode,
+                        scalp_config=scalp_cfg if strategy_mode == "scalp" else None,
                     )
                     for pa in profit_actions:
                         inst = pa["instrument"]
@@ -813,6 +817,7 @@ class TradingSystem:
                 take_profit=signal.take_profit,
                 order_id=result["orderId"],
                 trade_log_id=trade_log_id,
+                max_hold_minutes=getattr(signal, "max_hold_minutes", 0),
             ))
 
     def _save_system_state(self):
@@ -1045,7 +1050,10 @@ class TradingSystem:
         - Non-neutral direction
         - Below the lowest enabled tier BUT within 75% of its threshold
         """
-        tiers_config = self.config.get("shot_tiers", {})
+        if self.config.get("strategy", {}).get("mode") == "scalp":
+            tiers_config = self.config.get("scalp_tiers", self.config.get("shot_tiers", {}))
+        else:
+            tiers_config = self.config.get("shot_tiers", {})
         radar_items = []
 
         for inst, pred in predictions.items():

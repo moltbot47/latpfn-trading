@@ -186,6 +186,7 @@ risk:
   max_concurrent_positions: 6
   stop_loss_atr_multiplier: 1.5
   min_reward_risk_ratio: 1.5
+  scalp_min_reward_risk_ratio: 0.3  # global floor for scalp mode
   trailing_stop_activation_pct: 2.0
   trailing_stop_distance_pct: 1.0
 
@@ -284,6 +285,79 @@ shot_tiers:
     size_multiplier: 0.15      # minimum position
     min_reward_risk: 5.0
     enabled: false             # disabled by default — lottery ticket
+
+# ── Strategy Mode ────────────────────────────────────────────
+# standard = current behavior (far-term targets, wide R:R)
+# scalp    = near-term targets, tight R:R, max hold times
+strategy:
+  mode: scalp                  # standard | scalp
+  scalp:
+    forecast_bar_start: 3      # use bars 3-12 for target (vs 50-60)
+    forecast_bar_end: 12
+    uncertainty_deduction: 0.3 # less conservative (vs 0.5 in standard)
+    min_target_stop_ratio: 0.15 # min target as fraction of stop (lower = tighter targets)
+    # Profit manager overrides
+    trailing_stop_activation_pct: 0.30
+    trailing_stop_distance_pct: 0.20
+    tighten_stop_pct: 0.60
+    close_pct: 0.85
+    min_hold_minutes: 3
+    max_consecutive_losses: 5  # pause after 5 straight losses
+    cooldown_minutes: 30       # cooldown after loss streak
+
+# ── Scalp Mode Shot Tiers ────────────────────────────────────
+# Only used when strategy.mode = "scalp"
+# Same confidence thresholds, tighter exits for near-term capture
+scalp_tiers:
+  layup:
+    label: "Scalp Layup"
+    confidence_min: 0.60
+    target_multiplier: 0.25    # 25% of near-term forecast
+    stop_multiplier: 0.7
+    size_multiplier: 1.0
+    min_reward_risk: 0.3       # needs 77% WR to breakeven
+    max_hold_minutes: 45       # close profitable trades after 45 min
+    enabled: true
+
+  short_range:
+    label: "Scalp Short Range"
+    confidence_min: 0.52
+    target_multiplier: 0.30
+    stop_multiplier: 0.8
+    size_multiplier: 1.0
+    min_reward_risk: 0.35      # needs 74% WR
+    max_hold_minutes: 60
+    enabled: true
+
+  free_throw:
+    label: "Scalp Free Throw"
+    confidence_min: 0.45
+    target_multiplier: 0.40
+    stop_multiplier: 0.9
+    size_multiplier: 0.75
+    min_reward_risk: 0.4       # needs 71% WR
+    max_hold_minutes: 75
+    enabled: true
+
+  three_pointer:
+    label: "Scalp 3-Pointer"
+    confidence_min: 0.38
+    target_multiplier: 0.55
+    stop_multiplier: 1.0
+    size_multiplier: 0.5
+    min_reward_risk: 0.5       # needs 67% WR
+    max_hold_minutes: 90
+    enabled: true
+
+  half_court:
+    label: "Scalp Half Court"
+    confidence_min: 0.32
+    target_multiplier: 0.70
+    stop_multiplier: 1.1
+    size_multiplier: 0.25
+    min_reward_risk: 0.6       # needs 63% WR
+    max_hold_minutes: 120
+    enabled: true
 
 # ── Execution Mode ───────────────────────────────────────────
 # pickmytrade = webhook to PickMyTrade (works with Apex prop firm)

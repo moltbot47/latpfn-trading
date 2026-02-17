@@ -10,7 +10,7 @@ from typing import Optional
 import numpy as np
 
 from signals.confidence import score_confidence
-from signals.exits import calculate_exits
+from signals.exits import calculate_exits, calculate_scalp_exits
 from signals.shot_classifier import classify as classify_shot
 
 logger = logging.getLogger(__name__)
@@ -30,6 +30,7 @@ class TradingSignal:
     shot_type: str = "no_trade"     # NBA tier: layup, short_range, free_throw, etc.
     size_multiplier: float = 1.0    # from shot tier config (risk manager uses this)
     regime_size_mult: float = 1.0   # from market-based regime detection (sizing adjustment)
+    max_hold_minutes: int = 0       # 0 = no limit (standard), >0 = scalp auto-close
     timestamp: datetime = field(default_factory=datetime.now)
 
 
@@ -40,7 +41,16 @@ class SignalGenerator:
         self.config = config
         self.signal_config = config["signal"]
         self.risk_config = config["risk"]
-        self.tiers_config = config.get("shot_tiers", {})
+
+        # Strategy mode: standard (far-term targets) or scalp (near-term targets)
+        self.strategy_mode = config.get("strategy", {}).get("mode", "standard")
+        self.scalp_config = config.get("strategy", {}).get("scalp", {})
+
+        if self.strategy_mode == "scalp":
+            self.tiers_config = config.get("scalp_tiers", config.get("shot_tiers", {}))
+            logger.info("Signal generator using SCALP mode (near-term targets)")
+        else:
+            self.tiers_config = config.get("shot_tiers", {})
 
     def generate(
         self,
@@ -111,19 +121,35 @@ class SignalGenerator:
 
         # Entry / exit levels (scaled by shot tier)
         entry_price = prediction["current_price"]
-        stop_loss, take_profit = calculate_exits(
-            entry_price=entry_price,
-            direction=direction,
-            forecast=prediction["forecast_prices"],
-            uncertainty=prediction["uncertainty"],
-            risk_config=self.risk_config,
-            target_multiplier=target_multiplier,
-            stop_multiplier=stop_multiplier,
-            min_rr_override=min_rr_override,
-        )
+
+        if self.strategy_mode == "scalp":
+            stop_loss, take_profit = calculate_scalp_exits(
+                entry_price=entry_price,
+                direction=direction,
+                forecast=prediction["forecast_prices"],
+                uncertainty=prediction["uncertainty"],
+                risk_config=self.risk_config,
+                scalp_config=self.scalp_config,
+                target_multiplier=target_multiplier,
+                stop_multiplier=stop_multiplier,
+                min_rr_override=min_rr_override,
+            )
+        else:
+            stop_loss, take_profit = calculate_exits(
+                entry_price=entry_price,
+                direction=direction,
+                forecast=prediction["forecast_prices"],
+                uncertainty=prediction["uncertainty"],
+                risk_config=self.risk_config,
+                target_multiplier=target_multiplier,
+                stop_multiplier=stop_multiplier,
+                min_rr_override=min_rr_override,
+            )
 
         # Preliminary position size (risk manager will refine with size_multiplier)
         position_size = 1
+
+        max_hold = tier_params.get("max_hold_minutes", 0) if self.strategy_mode == "scalp" else 0
 
         signal = TradingSignal(
             instrument=instrument,
@@ -136,6 +162,7 @@ class SignalGenerator:
             regime=prediction["regime"],
             shot_type=tier_name,
             size_multiplier=size_multiplier,
+            max_hold_minutes=max_hold,
         )
 
         logger.info(

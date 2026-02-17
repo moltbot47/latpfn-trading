@@ -38,12 +38,24 @@ DEFAULT_PROFIT_CONFIG = {
     "trailing_stop_distance_pct": 0.40,    # Trail distance = 40% of total TP target
 }
 
+# Scalp mode: tighter thresholds for fast near-term profit capture
+SCALP_PROFIT_CONFIG = {
+    "tighten_stop_pct": 0.60,      # BE at 60% of TP (vs 75%)
+    "close_pct": 0.85,             # auto-close at 85% of TP (vs 90%)
+    "min_hold_minutes": 3,         # faster tightening (vs 15 min)
+    "slot_free_min_profit_pct": 0.15,  # close for slot at 15% (vs 25%)
+    "trailing_stop_activation_pct": 0.30,  # activate trail at 30% (vs 50%)
+    "trailing_stop_distance_pct": 0.20,    # trail 20% of TP distance (vs 40%)
+}
+
 
 def check_profit_actions(
     open_positions: Dict[str, Any],
     instruments_config: dict,
     profit_config: Optional[dict] = None,
     pending_signals: Optional[List[dict]] = None,
+    strategy_mode: str = "standard",
+    scalp_config: Optional[dict] = None,
 ) -> List[dict]:
     """
     Evaluate open positions and recommend profit-taking actions.
@@ -71,6 +83,7 @@ def check_profit_actions(
         pending_signals:    Optional list of new signal dicts that need a slot.
                             Each should have at least 'instrument' and
                             'composite_score'. Used for slot-freeing logic.
+        strategy_mode:      'standard' or 'scalp'. Selects default thresholds.
 
     Returns:
         List of action dicts. Each dict contains:
@@ -87,7 +100,12 @@ def check_profit_actions(
     if not open_positions:
         return []
 
-    cfg = {**DEFAULT_PROFIT_CONFIG, **(profit_config or {})}
+    if strategy_mode == "scalp":
+        # Use scalp config from settings.yaml if provided, else fall back to defaults
+        base = {**SCALP_PROFIT_CONFIG, **(scalp_config or {})}
+    else:
+        base = DEFAULT_PROFIT_CONFIG
+    cfg = {**base, **(profit_config or {})}
     actions: List[dict] = []
 
     for instrument, pos in list(open_positions.items()):
@@ -158,6 +176,21 @@ def _evaluate_position(
         hold_minutes = (datetime.now() - pos.entry_time).total_seconds() / 60.0
     except Exception:
         hold_minutes = 0.0
+
+    # ── Max hold time exit (scalp mode) ────────────────────────────
+    # Only force-close if profitable or breakeven. If losing, let stop
+    # loss handle it — cutting losers early via max_hold just converts
+    # potential winners into realized losses.
+    max_hold = getattr(pos, "max_hold_minutes", 0)
+    if max_hold > 0 and hold_minutes >= max_hold and pnl_pct_of_target > 0:
+        return _build_action(
+            pos, "close", current_price, pnl_pct_of_target, pnl_dollars,
+            reason=(
+                f"Max hold time ({max_hold} min) exceeded after {hold_minutes:.0f} min. "
+                f"Position at {pnl_pct_of_target:.0%} of target. "
+                f"Closing to capture ${pnl_dollars:+.2f} and free slot."
+            ),
+        )
 
     # ── Trailing stop logic ───────────────────────────────────────
     trail_activation = cfg.get("trailing_stop_activation_pct", 0.50)

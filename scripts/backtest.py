@@ -46,8 +46,11 @@ def run_backtest(
     n_prompt = config["model"]["n_prompt"]
     window = n_history + n_prompt
 
+    strategy_mode = config.get("strategy", {}).get("mode", "standard")
+
     print(f"\n{'='*60}")
     print(f"BACKTEST: {instrument} ({inst_cfg['name']})")
+    print(f"Strategy: {strategy_mode.upper()}")
     print(f"Period: {days} days  |  Interval: {interval}")
     print(f"Window: {n_history} history + {n_prompt} forecast = {window} bars")
     print(f"Account: ${account_equity:,.2f}")
@@ -137,7 +140,15 @@ def run_backtest(
                 signal.take_profit += slippage
                 signal.stop_loss += slippage
 
-        trade_result = simulate_trade(signal, future_prices, inst_cfg["contract_size"])
+        # Max hold bars for scalp mode (interval-aware)
+        max_hold = getattr(signal, "max_hold_minutes", 0)
+        interval_minutes = int(interval.rstrip("m")) if interval.endswith("m") else 5
+        max_hold_bars = max_hold // interval_minutes if max_hold > 0 else 0
+
+        trade_result = simulate_trade(
+            signal, future_prices, inst_cfg["contract_size"],
+            max_hold_bars=max_hold_bars,
+        )
         if trade_result:
             trade_result["shot_type"] = getattr(signal, "shot_type", "unknown")
             trade_result["direction"] = signal.direction
@@ -216,7 +227,7 @@ def _print_summary(trades: list, account_equity: float, instrument: str):
     print(f"  Return:          {total_pnl/account_equity*100:+.2f}%")
     print()
     print(f"  Exit reasons:")
-    for reason in ["take_profit", "stop_loss", "timeout"]:
+    for reason in ["take_profit", "stop_loss", "max_hold", "timeout"]:
         count = exit_reasons.count(reason)
         print(f"    {reason:15s}: {count}")
 
@@ -304,10 +315,18 @@ def main():
     parser.add_argument("--equity", type=float, default=50000, help="Starting account equity")
     parser.add_argument("--slippage", type=float, default=0, help="Slippage points added to entries/exits")
     parser.add_argument("--save-results", action="store_true", help="Save results to reports/ directory")
+    parser.add_argument("--mode", type=str, choices=["standard", "scalp"], default=None,
+                        help="Strategy mode override (default: use config)")
     parser.add_argument("--config", type=str, default=None, help="Config file path")
     args = parser.parse_args()
 
     config = load_config(args.config)
+
+    # Override strategy mode if specified via CLI
+    if args.mode:
+        if "strategy" not in config:
+            config["strategy"] = {}
+        config["strategy"]["mode"] = args.mode
 
     # Validate instrument exists in config
     if args.instrument not in config["instruments"]:

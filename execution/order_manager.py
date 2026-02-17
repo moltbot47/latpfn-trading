@@ -26,6 +26,7 @@ class Position:
     entry_time: datetime = field(default_factory=datetime.now)
     current_price: float = 0.0
     trade_log_id: Optional[int] = None
+    max_hold_minutes: int = 0   # 0 = no limit (standard), >0 = scalp auto-close
     trailing_stop_active: bool = False
     trailing_stop_level: float = 0.0
     best_price: float = 0.0  # best price seen since entry (for trailing)
@@ -43,6 +44,7 @@ class Position:
             "entry_time": self.entry_time.isoformat(),
             "current_price": self.current_price,
             "trade_log_id": self.trade_log_id,
+            "max_hold_minutes": self.max_hold_minutes,
         }
         if self.trailing_stop_active:
             d["trailing_stop_active"] = True
@@ -66,6 +68,7 @@ class Position:
             else datetime.now(),
             current_price=data.get("current_price", 0.0),
             trade_log_id=data.get("trade_log_id"),
+            max_hold_minutes=data.get("max_hold_minutes", 0),
         )
         pos.trailing_stop_active = data.get("trailing_stop_active", False)
         pos.trailing_stop_level = data.get("trailing_stop_level", 0.0)
