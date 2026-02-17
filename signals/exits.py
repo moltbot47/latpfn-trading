@@ -88,6 +88,8 @@ def calculate_scalp_exits(
     target_multiplier: float = 1.0,
     stop_multiplier: float = 1.0,
     min_rr_override: float | None = None,
+    forecast_bar_start: int | None = None,
+    forecast_bar_end: int | None = None,
 ) -> tuple[float, float]:
     """
     Scalp exit calculation using near-term forecast (bars 3-12).
@@ -124,8 +126,9 @@ def calculate_scalp_exits(
     stop_distance = max(stop_distance, entry_price * 0.001)
 
     # ── Target from NEAR-TERM forecast (bars 3-12 by default) ─────
-    bar_start = scalp_config.get("forecast_bar_start", 3)
-    bar_end = scalp_config.get("forecast_bar_end", 12)
+    # Per-tier overrides take precedence over global scalp_config
+    bar_start = forecast_bar_start if forecast_bar_start is not None else scalp_config.get("forecast_bar_start", 3)
+    bar_end = forecast_bar_end if forecast_bar_end is not None else scalp_config.get("forecast_bar_end", 12)
     unc_deduction = scalp_config.get("uncertainty_deduction", 0.3)
     min_target_ratio = scalp_config.get("min_target_stop_ratio", 0.3)
 

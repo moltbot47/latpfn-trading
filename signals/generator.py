@@ -118,6 +118,8 @@ class SignalGenerator:
         stop_multiplier = tier_params.get("stop_multiplier", 1.0)
         size_multiplier = tier_params.get("size_multiplier", 1.0)
         min_rr_override = tier_params.get("min_reward_risk", None)
+        tier_bar_start = tier_params.get("forecast_bar_start")
+        tier_bar_end = tier_params.get("forecast_bar_end")
 
         # Entry / exit levels (scaled by shot tier)
         entry_price = prediction["current_price"]
@@ -133,6 +135,8 @@ class SignalGenerator:
                 target_multiplier=target_multiplier,
                 stop_multiplier=stop_multiplier,
                 min_rr_override=min_rr_override,
+                forecast_bar_start=tier_bar_start,
+                forecast_bar_end=tier_bar_end,
             )
         else:
             stop_loss, take_profit = calculate_exits(

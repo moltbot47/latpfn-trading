@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 
 # Display colors for dashboard (rich markup)
 TIER_COLORS = {
+    "dunk":         "bold bright_white",
+    "alley_oop":    "bold bright_cyan",
     "layup":        "bold bright_green",
     "short_range":  "bold green",
     "free_throw":   "bold yellow",

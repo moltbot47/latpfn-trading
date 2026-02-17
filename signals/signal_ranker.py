@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 # Tier priority weights — higher tiers are more desirable
 TIER_WEIGHTS: Dict[str, float] = {
+    "dunk": 1.0,
+    "alley_oop": 1.0,
     "layup": 1.0,
     "short_range": 0.90,
     "free_throw": 0.75,

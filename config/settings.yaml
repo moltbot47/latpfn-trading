@@ -57,7 +57,7 @@ instruments:
     # Backtest 02/12: 41 trades, PF 1.56, +$1538
     # Winners: layup, short_range, free_throw, three_pointer
     # half_court confirmed 0% WR, -$1087 in confirmation run — removed
-    allowed_tiers: [layup, short_range, free_throw, three_pointer]
+    allowed_tiers: [dunk, alley_oop, layup, short_range, free_throw, three_pointer]
     context_assets:
       - "QQQ"    # Nasdaq ETF
       - "SPY"    # S&P 500 ETF
@@ -78,7 +78,7 @@ instruments:
     # Backtest 02/12: 37 trades, 43.2% WR, +$383, PF 1.27
     # Winners: short_range (PF 3.22), layup (PF 1.21), three_pointer (PF 1.07)
     # free_throw confirmed PF 0.62, -$86 in confirmation run — removed
-    allowed_tiers: [layup, short_range, three_pointer]
+    allowed_tiers: [dunk, alley_oop, layup, short_range, three_pointer]
     context_assets:
       - "SPY"    # S&P 500 ETF
       - "DIA"    # Dow ETF
@@ -140,7 +140,7 @@ instruments:
     tick_value: 0.50        # $0.50 per tick
     # Backtest 02/16: 19 trades, 68.4% WR, PF 1.08
     # layup PF 99, free_throw PF 2.55, short_range PF 0.15 (losing)
-    allowed_tiers: [layup, free_throw]
+    allowed_tiers: [dunk, alley_oop, layup, free_throw]
     context_assets:
       - "ETH-USD"     # Ether (highly correlated)
       - "COIN"        # Coinbase (crypto exchange proxy)
@@ -160,7 +160,7 @@ instruments:
     tick_value: 0.05        # $0.05 per tick
     # Backtest 02/16: 13 trades, 69.2% WR, PF 0.66
     # layup PF 99 (1 trade), short_range PF 1.23, free_throw PF 0.23 (losing)
-    allowed_tiers: [layup, short_range]
+    allowed_tiers: [dunk, layup, short_range]
     context_assets:
       - "BTC-USD"     # Bitcoin (lead indicator for crypto)
       - "COIN"        # Coinbase
@@ -180,7 +180,7 @@ instruments:
     tick_value: 0.15625     # $0.15625 per tick
     # Backtest 02/16: 26 trades, 80.8% WR, PF 2.04
     # layup PF 2.09, short_range PF 99, three_pointer PF 99, free_throw PF 0.80 (losing)
-    allowed_tiers: [layup, short_range, three_pointer]
+    allowed_tiers: [dunk, alley_oop, layup, short_range, three_pointer]
     context_assets:
       - "^TNX"        # 10-Year yield (inverse)
       - "^TYX"        # 30-Year yield
@@ -372,9 +372,33 @@ strategy:
 # Only used when strategy.mode = "scalp"
 # Same confidence thresholds, tighter exits for near-term capture
 scalp_tiers:
+  dunk:
+    label: "Scalp Dunk"
+    confidence_min: 0.70         # only the strongest signals
+    forecast_bar_start: 1        # bars 1-5 (5-25 min) — per-tier override
+    forecast_bar_end: 5
+    target_multiplier: 0.10      # 10% of near-term forecast (ultra-tight)
+    stop_multiplier: 0.5         # tight stop — fast exit on wrong direction
+    size_multiplier: 1.0         # full size (highest confidence)
+    min_reward_risk: 0.12        # needs ~89% WR to breakeven
+    max_hold_minutes: 10         # close profitable trades after 10 min
+    enabled: true
+
+  alley_oop:
+    label: "Scalp Alley-Oop"
+    confidence_min: 0.65         # very strong signals
+    forecast_bar_start: 1        # bars 1-7 (5-35 min)
+    forecast_bar_end: 7
+    target_multiplier: 0.15      # 15% of near-term forecast
+    stop_multiplier: 0.6
+    size_multiplier: 1.0
+    min_reward_risk: 0.18        # needs ~85% WR
+    max_hold_minutes: 15
+    enabled: true
+
   layup:
     label: "Scalp Layup"
-    confidence_min: 0.60
+    confidence_min: 0.60         # now captures 0.60-0.65 range
     target_multiplier: 0.25    # 25% of near-term forecast
     stop_multiplier: 0.7
     size_multiplier: 1.0
