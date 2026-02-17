@@ -1,7 +1,7 @@
 # LaT-PFN Automated Futures Trading System
 
 ## What This Is
-Automated futures trading using LaT-PFN zero-shot time-series forecasting. Predicts price movements on micro futures (MYM, MNQ, MES) and executes via PickMyTrade webhooks to Apex prop firm accounts.
+Automated futures trading using LaT-PFN zero-shot time-series forecasting. Predicts price movements on micro futures (MYM, MNQ, MES, MBT, MET, 10Y) and executes via PickMyTrade webhooks to Apex prop firm accounts.
 
 ## Repo
 - **GitHub:** github.com/moltbot47/latpfn-trading
@@ -47,11 +47,14 @@ main.py → orchestrator/main_loop.py (TradingSystem)
 - **Secrets:** .env (PICKMYTRADE_TOKEN, PICKMYTRADE_ACCOUNT_ID, DISCORD_BOT_TOKEN, TRADOVATE_*)
 
 ## Active Instruments & Tier Filters
-| Symbol | Contract | Size | Allowed Tiers |
-|--------|----------|------|---------------|
-| MYM | Micro Dow | $0.50/pt | three_pointer, half_court |
-| MNQ | Micro Nasdaq | $2/pt | layup, short_range, free_throw, three_pointer |
-| MES | Micro S&P 500 | $5/pt | layup, short_range, three_pointer |
+| Symbol | Contract | Size | Allowed Tiers | Asset Class |
+|--------|----------|------|---------------|-------------|
+| MYM | Micro Dow | $0.50/pt | three_pointer, half_court | equity_index |
+| MNQ | Micro Nasdaq | $2/pt | layup, short_range, free_throw, three_pointer | equity_index |
+| MES | Micro S&P 500 | $5/pt | layup, short_range, three_pointer | equity_index |
+| MBT | Micro Bitcoin | $0.10/pt | layup, free_throw | crypto |
+| MET | Micro Ether | $0.10/pt | layup, short_range | crypto |
+| 10Y | Micro 10Y Note | $10/pt | layup, short_range, three_pointer | bonds |
 
 Disabled: M2K (no edge), MGC (Apex metals halt), MCL (no edge), FX micros (broken data)
 

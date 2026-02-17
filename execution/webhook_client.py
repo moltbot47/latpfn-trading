@@ -123,10 +123,27 @@ class WebhookClient:
         return None
 
     async def flatten_position(self, account_id: int = None) -> Optional[Dict]:
-        """Close all positions by sending close webhooks for common symbols."""
-        for symbol in ["MNQ", "MYM", "MES", "M2K", "MGC", "MCL", "M6E", "M6B", "M6A", "M6J", "NQ", "YM", "ES", "RTY", "GC", "CL"]:
-            await self.close_position(symbol)
-        return {"status": "flattened"}
+        """Close all positions by sending close webhooks for all known symbols in parallel."""
+        symbols = [
+            "MNQ", "MYM", "MES", "M2K", "MGC", "MCL",
+            "M6E", "M6B", "M6A", "M6J",
+            "MBT", "MET", "10Y",
+            "NQ", "YM", "ES", "RTY", "GC", "CL",
+        ]
+        results = await asyncio.gather(
+            *[self.close_position(sym) for sym in symbols],
+            return_exceptions=True,
+        )
+        failed = [
+            sym for sym, r in zip(symbols, results)
+            if r is None or isinstance(r, Exception)
+        ]
+        if failed:
+            logger.error(
+                "FLATTEN WARNING: close webhook failed for %s — verify positions manually!",
+                failed,
+            )
+        return {"status": "flattened", "failed": failed}
 
     # ── Account info (stub — PickMyTrade has no balance query) ────────
 

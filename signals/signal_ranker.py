@@ -45,6 +45,9 @@ ASSET_CLASS: Dict[str, str] = {
     "M6B": "fx",
     "M6A": "fx",
     "M6J": "fx",
+    "MBT": "crypto",
+    "MET": "crypto",
+    "10Y": "bonds",
 }
 
 

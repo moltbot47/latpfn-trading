@@ -236,17 +236,23 @@ class TradingSystem:
             if self.order_mgr.open_count > 0:
                 await self._reconcile_positions()
 
-            # ── Phase 1: Scan all instruments for candidate signals ──
+            # ── Phase 1: Scan all instruments for candidate signals (parallel) ──
             candidates = []
-            for instrument in self.instruments:
+
+            async def _safe_scan(inst):
                 try:
-                    pred, candidate = await self._scan_instrument(instrument)
-                    predictions[instrument] = pred
-                    if candidate is not None:
-                        candidates.append(candidate)
+                    return inst, await self._scan_instrument(inst)
                 except Exception as e:
-                    logger.error("Error scanning %s: %s", instrument, e, exc_info=True)
-                    predictions[instrument] = None
+                    logger.error("Error scanning %s: %s", inst, e, exc_info=True)
+                    return inst, (None, None)
+
+            scan_results = await asyncio.gather(
+                *[_safe_scan(inst) for inst in self.instruments]
+            )
+            for inst, (pred, candidate) in scan_results:
+                predictions[inst] = pred
+                if candidate is not None:
+                    candidates.append(candidate)
 
             # ── Phase 2: Rank candidates and execute the best ones ──
             max_pos = self.config["risk"].get("max_concurrent_positions", 6)

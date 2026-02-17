@@ -27,6 +27,9 @@ TICKER_MAP = {
     "M6B": "6B=F",
     "M6A": "6A=F",
     "M6J": "6J=F",
+    "MBT": "BTC-USD",
+    "MET": "ETH-USD",
+    "10Y": "ZN=F",
 }
 
 

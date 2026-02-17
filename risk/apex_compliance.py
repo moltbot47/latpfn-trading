@@ -24,7 +24,9 @@ logger = logging.getLogger(__name__)
 
 # Instruments that are considered correlated (equity indices)
 CORRELATED_GROUPS = [
-    {"MYM", "MNQ", "YM", "NQ", "ES", "MES", "RTY", "M2K"},
+    {"MYM", "MNQ", "YM", "NQ", "ES", "MES", "RTY", "M2K"},  # equity indices
+    {"MBT", "MET"},                                             # crypto
+    # 10Y stands alone — bonds not correlated with equities/crypto directionally
 ]
 
 ET = ZoneInfo("America/New_York")
@@ -316,7 +318,7 @@ class ApexCompliance:
                     f"Apex correlated instrument violation: "
                     f"cannot go {direction.upper()} {instrument} while "
                     f"{pos.direction.upper()} {pos_inst} is open "
-                    f"(both are correlated equity indices)"
+                    f"(both in correlated group)"
                 )
 
         return True, ""

@@ -127,9 +127,71 @@ instruments:
   #     - "UUP"
   #     - "^VIX"
 
-  # ── DIVERSIFICATION — OIL & FX ─────────────────────────────
+  # ── DIVERSIFICATION — CRYPTO & BONDS ───────────────────────
   # Uncorrelated asset classes for portfolio diversification.
-  # Remember to add MCL and M6E symbol mappings in PickMyTrade dashboard.
+  # Remember to add new symbol mappings in PickMyTrade dashboard.
+
+  MBT:
+    name: "Micro Bitcoin Futures"
+    yfinance_ticker: "BTC-USD"       # Crypto spot — real-time, no CME delay
+    tradovate_symbol: "MBT"
+    contract_size: 0.10     # $0.10 per point (1/10 BTC, each $1 BTC move = $0.10)
+    tick_size: 5.0          # 5 index points per tick
+    tick_value: 0.50        # $0.50 per tick
+    # Backtest 02/16: 19 trades, 68.4% WR, PF 1.08
+    # layup PF 99, free_throw PF 2.55, short_range PF 0.15 (losing)
+    allowed_tiers: [layup, free_throw]
+    context_assets:
+      - "ETH-USD"     # Ether (highly correlated)
+      - "COIN"        # Coinbase (crypto exchange proxy)
+      - "MSTR"        # MicroStrategy (BTC treasury proxy)
+      - "QQQ"         # Nasdaq (tech/risk-on correlation)
+      - "SPY"         # S&P 500 (broad risk sentiment)
+      - "^VIX"        # Volatility (risk-off indicator)
+      - "GLD"         # Gold (alternative store of value)
+      - "DX-Y.NYB"    # Dollar index (inverse correlation)
+
+  MET:
+    name: "Micro Ether Futures"
+    yfinance_ticker: "ETH-USD"
+    tradovate_symbol: "MET"
+    contract_size: 0.10     # $0.10 per point (1/10 ETH)
+    tick_size: 0.50         # 0.50 index points per tick
+    tick_value: 0.05        # $0.05 per tick
+    # Backtest 02/16: 13 trades, 69.2% WR, PF 0.66
+    # layup PF 99 (1 trade), short_range PF 1.23, free_throw PF 0.23 (losing)
+    allowed_tiers: [layup, short_range]
+    context_assets:
+      - "BTC-USD"     # Bitcoin (lead indicator for crypto)
+      - "COIN"        # Coinbase
+      - "QQQ"         # Nasdaq
+      - "SPY"         # S&P 500
+      - "^VIX"        # Volatility
+      - "XLK"         # Tech sector
+      - "ARKK"        # Innovation ETF (risk-on proxy)
+      - "DX-Y.NYB"    # Dollar index
+
+  "10Y":
+    name: "Micro 10-Year Note Futures"
+    yfinance_ticker: "ZN=F"          # Full-size 10Y note futures
+    tradovate_symbol: "10Y"
+    contract_size: 10.0     # $10 per point
+    tick_size: 0.015625     # 1/64 of a point
+    tick_value: 0.15625     # $0.15625 per tick
+    # Backtest 02/16: 26 trades, 80.8% WR, PF 2.04
+    # layup PF 2.09, short_range PF 99, three_pointer PF 99, free_throw PF 0.80 (losing)
+    allowed_tiers: [layup, short_range, three_pointer]
+    context_assets:
+      - "^TNX"        # 10-Year yield (inverse)
+      - "^TYX"        # 30-Year yield
+      - "TLT"         # 20+ Year Treasury ETF
+      - "IEF"         # 7-10 Year Treasury ETF
+      - "SPY"         # Equities (inverse correlation)
+      - "^VIX"        # Volatility
+      - "DX-Y.NYB"    # Dollar index
+      - "GLD"         # Gold (safe haven correlation)
+
+  # ── DISABLED INSTRUMENTS ──────────────────────────────────
 
   # MCL: DISABLED — Backtest shows 0% WR across 25 trades, -$8,011.
   # Model has zero predictive power on crude oil.
@@ -192,9 +254,10 @@ risk:
 
   # Portfolio exposure limits (MES-equivalent)
   # 1 MNQ=$2/pt = 0.4 MES-eq, 1 MYM=$0.50/pt = 0.1 MES-eq
-  # 1 MES=$5/pt = 1.0 MES-eq, 1 M2K=$5/pt = 1.0 MES-eq
-  max_net_mes_equivalent: 6.0     # Max net directional exposure (6 diversified positions)
-  max_gross_mes_equivalent: 10.0  # Max total (long+short) exposure
+  # 1 MES=$5/pt = 1.0 MES-eq, 1 MBT=$0.10/pt = 0.02 MES-eq
+  # 1 10Y=$10/pt = 2.0 MES-eq
+  max_net_mes_equivalent: 8.0     # Max net directional exposure (raised for crypto/bonds)
+  max_gross_mes_equivalent: 12.0  # Max total (long+short) exposure
 
   prop_firm:
     starting_balance: 50000      # Account starting balance
