@@ -647,21 +647,20 @@ class TurboStrategy:
         mom_dir = momentum["direction"]
         mom_strength = momentum["strength"]
 
-        # Decision logic — HYBRID STRATEGY (contrarian + market_lean)
+        # Decision logic — CONFIRMATION-REQUIRED STRATEGY
         #
-        # Data analysis (554 trades):
-        #   contrarian: 29.8% WR, -$234 (LOSING)
-        #   market_lean: 77.8% WR, +$3.45 (WINNING, small sample)
-        #   after_win: 53.2% WR — wins cluster
-        #   after_loss: 21.8% WR — losses cluster
+        # Data analysis (463 trades):
+        #   contrarian (no confirmation): 29.8% WR, -$234 (LOSING)
+        #   market_lean (momentum confirms): 77.8% WR, +$3.45 (WINNING)
+        #   Down direction overall: 28% WR, -$212 (HEMORRHAGING)
+        #   Up direction overall: 35% WR, +$17 (NEAR BREAKEVEN)
+        #   Breakeven WR at 1.70x payoff: 37%
         #
-        # New approach:
-        #   1. When momentum CONFIRMS market lean → buy cheap side (contrarian)
-        #      (market is overreacting, momentum is fading = mean reversion)
-        #   2. When momentum CONFIRMS expensive side → buy expensive side (lean)
-        #      (market + momentum agree = high probability)
-        #   3. When on a win streak → trust contrarian more aggressively
-        #   4. When cold → only take high-confidence setups
+        # Rules:
+        #   1. Market lean + momentum confirms → follow market (highest WR)
+        #   2. Contrarian ONLY when momentum actively reverses (mean reversion)
+        #   3. No signal when momentum is flat → SKIP (don't default to contrarian)
+        #   4. Strong standalone momentum → follow it
         direction = None
         entry_price = None
         reason = ""
@@ -673,47 +672,45 @@ class TurboStrategy:
 
         # MODE 1: Market lean WITH momentum confirmation → follow the market
         # (market_lean signal type: 77.8% WR in data)
-        if market_up_lean and mom_dir == "Up" and mom_strength > 0.2:
+        if market_up_lean and mom_dir == "Up" and mom_strength > 0.15:
             # Market says Up + momentum says Up → bet Up (follow market)
             direction = "Up"
             entry_price = window.up_price
             reason = f"market_lean_up (mkt={window.up_price:.2f}, mom={mom_strength:.2f})"
             signal_type = "market_lean"
 
-        elif market_down_lean and mom_dir == "Down" and mom_strength > 0.2:
+        elif market_down_lean and mom_dir == "Down" and mom_strength > 0.15:
             # Market says Down + momentum says Down → bet Down (follow market)
             direction = "Down"
             entry_price = window.down_price
             reason = f"market_lean_down (mkt={window.down_price:.2f}, mom={mom_strength:.2f})"
             signal_type = "market_lean"
 
-        # MODE 2: Contrarian — buy cheap side when momentum is fading/neutral
-        # Only when momentum does NOT strongly oppose (filtered below)
-        elif market_up_lean:
+        # MODE 2: Contrarian — ONLY with active momentum reversal confirmation
+        # Requires momentum OPPOSITE to market lean (mean reversion signal)
+        elif market_up_lean and mom_dir == "Down" and mom_strength > 0.25:
+            # Market says Up but momentum reversing Down → contrarian Down
             direction = "Down"
             entry_price = window.down_price
-            reason = f"contrarian_down (market_up={window.up_price:.2f})"
+            reason = f"contrarian_reversal_down (mkt_up={window.up_price:.2f}, mom_dn={mom_strength:.2f})"
             signal_type = "contrarian"
 
-        elif market_down_lean:
+        elif market_down_lean and mom_dir == "Up" and mom_strength > 0.25:
+            # Market says Down but momentum reversing Up → contrarian Up
             direction = "Up"
             entry_price = window.up_price
-            reason = f"contrarian_up (market_down={window.down_price:.2f})"
+            reason = f"contrarian_reversal_up (mkt_dn={window.down_price:.2f}, mom_up={mom_strength:.2f})"
             signal_type = "contrarian"
+
+        # MODE 3: No market lean but strong momentum → follow momentum
+        elif mom_dir and mom_strength > 0.4 and not market_up_lean and not market_down_lean:
+            direction = mom_dir
+            entry_price = window.up_price if mom_dir == "Up" else window.down_price
+            reason = f"momentum_{mom_dir.lower()} (str={mom_strength:.2f})"
+            signal_type = "momentum"
 
         if not direction or not entry_price:
             return None, "no_signal", momentum
-
-        # ── Momentum confirmation filter ─────────────────────────────
-        # Data insight: pure contrarian gets 29.8% WR (losing).
-        # When momentum STRONGLY contradicts our direction, the market
-        # is pricing correctly and contrarian is wrong.
-        # Block trades where momentum is strongly AGAINST our direction.
-        if mom_dir is not None and mom_strength > 0.3:
-            # Strong momentum exists — check if it contradicts our bet
-            if (direction == "Up" and mom_dir == "Down") or \
-               (direction == "Down" and mom_dir == "Up"):
-                return None, "momentum_conflict", momentum
 
         # ── Adaptive Edge Engine gate ──────────────────────────────
         # Replaces static entry band + daily loss limit with data-driven
@@ -721,6 +718,7 @@ class TurboStrategy:
         # circuit breakers (hourly drawdown, loss streaks, edge decay).
         allowed, edge_reason = self.edge_engine.should_trade(
             asset=window.asset, direction=direction, entry_price=entry_price,
+            signal_type=signal_type,
         )
         if not allowed:
             return None, f"edge_{edge_reason}", momentum

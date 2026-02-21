@@ -28,9 +28,9 @@ DB_PATH = Path(__file__).parent.parent / "data" / "turbo_analytics.db"
 # ── Thresholds ──────────────────────────────────────────────────
 
 # Minimum WR to allow trading (below this = auto-disable)
-ASSET_MIN_WR = 0.25          # Per-asset: disable below 25% WR
-DIRECTION_MIN_WR = 0.25      # Per-direction: disable below 25%
-HOUR_MIN_WR = 0.25           # Per-hour: disable below 25%
+ASSET_MIN_WR = 0.30          # Per-asset: disable below 30% WR
+DIRECTION_MIN_WR = 0.32      # Per-direction: disable below 32%
+HOUR_MIN_WR = 0.28           # Per-hour: disable below 28%
 
 # Minimum sample size before applying filters
 MIN_SAMPLES_ASSET = 20
@@ -120,11 +120,11 @@ class EdgeMetrics:
     blocked_assets: List[str] = field(default_factory=list)
     blocked_directions: List[str] = field(default_factory=list)
     blocked_hours: List[int] = field(default_factory=list)
-    allowed_price_range: Tuple[float, float] = (0.28, 0.45)
+    allowed_price_range: Tuple[float, float] = (0.28, 0.42)
 
     # Optimal entry band (recalculated from data)
     optimal_floor: float = 0.28
-    optimal_ceiling: float = 0.45
+    optimal_ceiling: float = 0.42
 
     last_refresh: float = 0.0
 
@@ -200,7 +200,8 @@ class AdaptiveEdgeEngine:
                 )
 
     def should_trade(
-        self, asset: str, direction: str, entry_price: float
+        self, asset: str, direction: str, entry_price: float,
+        signal_type: str = "contrarian",
     ) -> Tuple[bool, str]:
         """
         Gate function: should we take this trade?
@@ -209,13 +210,14 @@ class AdaptiveEdgeEngine:
         """
         self.refresh()  # Auto-refresh if stale
         now = time.time()
+        is_market_lean = signal_type == "market_lean"
 
-        # 1. Cooldown (loss streak)
+        # 1. Cooldown (loss streak) — always applies
         if now < self._cooldown_until:
             remaining = int(self._cooldown_until - now)
             return False, f"cooldown_{remaining}s"
 
-        # 2. Hourly circuit breaker
+        # 2. Hourly circuit breaker — always applies
         hourly_pnl = sum(p for _, p in self._hourly_trades)
         self._metrics.hourly_pnl = hourly_pnl
         if hourly_pnl < HOURLY_LOSS_LIMIT:
@@ -223,15 +225,16 @@ class AdaptiveEdgeEngine:
             return False, f"hourly_loss_${hourly_pnl:.0f}"
         self._metrics.hourly_paused = False
 
-        # 3. Asset filter
+        # 3. Asset filter — always applies
         asset_stat = self._metrics.asset_stats.get(asset)
         if asset_stat and asset_stat.total >= MIN_SAMPLES_ASSET and not asset_stat.enabled:
             return False, f"asset_{asset}_blocked_{asset_stat.win_rate:.0%}"
 
-        # 4. Direction filter
-        dir_stat = self._metrics.direction_stats.get(direction)
-        if dir_stat and dir_stat.total >= MIN_SAMPLES_DIRECTION and not dir_stat.enabled:
-            return False, f"dir_{direction}_blocked_{dir_stat.win_rate:.0%}"
+        # 4. Direction filter — skip for market_lean (77.8% WR overrides direction stats)
+        if not is_market_lean:
+            dir_stat = self._metrics.direction_stats.get(direction)
+            if dir_stat and dir_stat.total >= MIN_SAMPLES_DIRECTION and not dir_stat.enabled:
+                return False, f"dir_{direction}_blocked_{dir_stat.win_rate:.0%}"
 
         # 5. Hour filter
         hour_utc = int(time.strftime("%H", time.gmtime()))
@@ -239,13 +242,16 @@ class AdaptiveEdgeEngine:
         if hour_stat and hour_stat.total >= MIN_SAMPLES_HOUR and not hour_stat.enabled:
             return False, f"hour_{hour_utc}_blocked_{hour_stat.win_rate:.0%}"
 
-        # 6. Entry price band (from optimal calculation)
+        # 6. Entry price band — two zones allowed:
+        #    Cheap zone (contrarian): 0.28-0.42 — high payoff, moderate WR
+        #    Expensive zone (market_lean): 0.55-0.85 — low payoff, high WR
+        #    Dead zone 0.42-0.55: breakeven WR too high, data shows losses
         floor = self._metrics.optimal_floor
         ceiling = self._metrics.optimal_ceiling
-        if entry_price < floor:
-            return False, f"price_below_floor_{entry_price:.2f}<{floor:.2f}"
-        if entry_price > ceiling:
-            return False, f"price_above_ceiling_{entry_price:.2f}>{ceiling:.2f}"
+        in_cheap_zone = floor <= entry_price <= ceiling
+        in_lean_zone = 0.55 <= entry_price <= 0.85
+        if not in_cheap_zone and not in_lean_zone:
+            return False, f"price_dead_zone_{entry_price:.2f}"
 
         # 7. Edge decay — if edge is severely fading, require tighter entry
         if self._metrics.edge_decaying and self._metrics.edge_decay < -0.08:
@@ -443,7 +449,7 @@ class AdaptiveEdgeEngine:
     def _refresh_optimal_band(self, conn):
         """Recalculate the optimal entry price band from data."""
         best_floor = 0.28
-        best_ceiling = 0.45
+        best_ceiling = 0.42  # Cheap zone ceiling (lean zone 0.55-0.85 handled separately)
 
         # Find which price buckets are profitable
         profitable_ranges = []
@@ -489,6 +495,8 @@ class AdaptiveEdgeEngine:
                 best_floor = least_bad[0]
                 best_ceiling = least_bad[1]
 
+        # Hard cap: entries above 0.42 have 40%+ breakeven WR which we can't achieve
+        best_ceiling = min(best_ceiling, 0.42)
         self._metrics.optimal_floor = best_floor
         self._metrics.optimal_ceiling = best_ceiling
         self._metrics.allowed_price_range = (best_floor, best_ceiling)
