@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # Maximum aggregate portfolio risk as a fraction of remaining drawdown cushion.
 # If total dollar risk of all open positions exceeds this ratio of the cushion,
 # new trades are blocked.
-MAX_PORTFOLIO_RISK_RATIO: float = 0.50  # 50% of cushion
+MAX_PORTFOLIO_RISK_RATIO: float = 2.0  # 200% of cushion (relaxed for small accounts)
 
 
 class RiskManager:
@@ -38,6 +38,10 @@ class RiskManager:
         # Drawdown-aware sizing state (None = not available, use static sizing)
         self.drawdown_cushion: Optional[float] = None
         self.max_drawdown: Optional[float] = None
+
+        # Kelly criterion per-tier risk overrides (set by orchestrator)
+        # Maps tier name → risk percentage as decimal (e.g. 0.015 for 1.5%)
+        self.tier_risk_overrides: Dict[str, float] = {}
 
     def set_account_state(
         self,
@@ -101,9 +105,26 @@ class RiskManager:
         # ── Position sizing: drawdown-aware or static ─────────────
         inst_cfg = self.config["instruments"][signal.instrument]
         base_risk_pct = self.risk_cfg["max_risk_per_trade_pct"] / 100.0
+        # Crypto perps use fractional sizes (0.001 BTC); futures use integer contracts
+        is_crypto = self.config.get("execution", {}).get("mode") == "hyperliquid"
+
+        # Apply Kelly criterion override if available for this tier
+        if self.tier_risk_overrides and signal.shot_type in self.tier_risk_overrides:
+            kelly_pct = self.tier_risk_overrides[signal.shot_type]
+            if kelly_pct > 0:
+                logger.info(
+                    "%s: Kelly override for %s: %.2f%% (was %.2f%%)",
+                    signal.instrument, signal.shot_type,
+                    kelly_pct * 100, base_risk_pct * 100,
+                )
+                base_risk_pct = kelly_pct
+
         effective_risk_pct = base_risk_pct  # default for logging
 
         if self.drawdown_cushion is not None and self.max_drawdown is not None:
+            # Scale min_cushion_to_trade proportionally (30% of max_drawdown)
+            # $750 default is 30% of $2500 Apex drawdown — same ratio for any account
+            min_cushion = self.max_drawdown * 0.30
             # Drawdown-aware dynamic sizing
             contracts, effective_risk_pct = calculate_drawdown_aware_size(
                 account_equity=self.current_equity,
@@ -114,6 +135,8 @@ class RiskManager:
                 max_contracts=self.risk_cfg["max_position_size_contracts"],
                 drawdown_cushion=self.drawdown_cushion,
                 max_drawdown=self.max_drawdown,
+                min_cushion_to_trade=min_cushion,
+                fractional=is_crypto,
             )
         else:
             # Fallback: static sizing (no drawdown data available)
@@ -124,6 +147,7 @@ class RiskManager:
                 contract_size=inst_cfg["contract_size"],
                 max_risk_pct=base_risk_pct,
                 max_contracts=self.risk_cfg["max_position_size_contracts"],
+                fractional=is_crypto,
             )
 
         # Apply shot-tier size multiplier AFTER drawdown scaling
@@ -134,16 +158,19 @@ class RiskManager:
         combined_mult = size_mult * regime_mult
 
         if combined_mult < 1.0:
-            scaled = int(contracts * combined_mult)
-            # Floor to at least 1 if base contracts > 0, else 0
-            contracts = max(scaled, 1) if contracts > 0 and combined_mult > 0 else scaled
+            if is_crypto:
+                contracts = contracts * combined_mult
+            else:
+                scaled = int(contracts * combined_mult)
+                # Floor to at least 1 if base contracts > 0, else 0
+                contracts = max(scaled, 1) if contracts > 0 and combined_mult > 0 else scaled
             logger.info(
-                "%s [%s]: tier_mult=%.2f × regime_mult=%.2f = %.2f → %d contracts",
+                "%s [%s]: tier_mult=%.2f × regime_mult=%.2f = %.2f → %s",
                 signal.instrument, signal.shot_type, size_mult, regime_mult,
-                combined_mult, contracts,
+                combined_mult, f"{contracts:.6f}" if is_crypto else str(int(contracts)),
             )
 
-        if contracts == 0:
+        if contracts == 0 or (is_crypto and contracts < 1e-8):
             cushion_info = ""
             if self.drawdown_cushion is not None:
                 cushion_info = f", cushion=${self.drawdown_cushion:.2f}"

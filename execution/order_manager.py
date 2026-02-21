@@ -30,6 +30,8 @@ class Position:
     trailing_stop_active: bool = False
     trailing_stop_level: float = 0.0
     best_price: float = 0.0  # best price seen since entry (for trailing)
+    original_size: float = 0.0  # original size before any partial closes
+    scale_out_done: bool = False  # True after first partial close at 50% TP
 
     def to_dict(self) -> dict:
         """Serialize to a JSON-compatible dictionary."""
@@ -50,6 +52,10 @@ class Position:
             d["trailing_stop_active"] = True
             d["trailing_stop_level"] = self.trailing_stop_level
             d["best_price"] = self.best_price
+        if self.original_size > 0:
+            d["original_size"] = self.original_size
+        if self.scale_out_done:
+            d["scale_out_done"] = True
         return d
 
     @classmethod
@@ -73,6 +79,8 @@ class Position:
         pos.trailing_stop_active = data.get("trailing_stop_active", False)
         pos.trailing_stop_level = data.get("trailing_stop_level", 0.0)
         pos.best_price = data.get("best_price", 0.0)
+        pos.original_size = data.get("original_size", 0.0)
+        pos.scale_out_done = data.get("scale_out_done", False)
         return pos
 
     @property
@@ -94,9 +102,11 @@ class OrderManager:
         self.trade_logger = trade_logger
 
     def add_position(self, position: Position):
+        if position.original_size == 0:
+            position.original_size = position.size
         self.open_positions[position.instrument] = position
         logger.info(
-            "Position opened: %s %s %d @ %.2f",
+            "Position opened: %s %s %s @ %.2f",
             position.instrument, position.direction,
             position.size, position.entry_price,
         )

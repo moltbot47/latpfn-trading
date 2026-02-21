@@ -192,25 +192,48 @@ def cycle_summary_embed(
         timestamp=datetime.now(timezone.utc),
     )
 
-    # Predictions summary
-    lines = []
+    # Predictions summary — compact format for many pairs
+    signal_lines = []
+    other_lines = []
     for inst, pred in predictions.items():
         if pred is None:
-            lines.append(f"**{inst}**: no data")
             continue
         direction = pred["direction"].upper()
         conf = pred["confidence"]
         shot = pred.get("shot_type", "")
-        if shot:
-            shot = f" [{shot.replace('_', ' ').title()}]"
         emoji = {"LONG": "\U0001F7E2", "SHORT": "\U0001F534"}.get(direction, "\u26AA")
-        lines.append(f"{emoji} **{inst}**: {direction} ({conf:.1%}){shot}")
 
-    embed.add_field(
-        name="Predictions",
-        value="\n".join(lines) if lines else "No predictions",
-        inline=False,
-    )
+        if shot and shot != "no_trade":
+            shot_label = f" [{shot.replace('_', ' ').title()}]"
+            signal_lines.append(f"{emoji} **{inst}**: {direction} ({conf:.1%}){shot_label}")
+        elif conf >= 0.30:
+            other_lines.append(f"{emoji} {inst} {direction} {conf:.0%}")
+
+    if signal_lines:
+        embed.add_field(
+            name="Signals Generated",
+            value="\n".join(signal_lines),
+            inline=False,
+        )
+
+    # Show top near-threshold pairs compactly (max 10)
+    if other_lines:
+        shown = other_lines[:10]
+        remaining = len(other_lines) - len(shown)
+        compact = " | ".join(shown)
+        if remaining > 0:
+            compact += f" +{remaining} more"
+        embed.add_field(
+            name=f"Near Threshold ({len(predictions)} pairs scanned)",
+            value=compact,
+            inline=False,
+        )
+    elif not signal_lines:
+        embed.add_field(
+            name=f"Predictions ({len(predictions)} pairs scanned)",
+            value="No signals above threshold",
+            inline=False,
+        )
 
     # Account
     embed.add_field(name="Equity", value=f"${account_equity:,.2f}", inline=True)
@@ -220,17 +243,19 @@ def cycle_summary_embed(
     # Drawdown status
     if drawdown_status:
         dd = drawdown_status
-        lock_label = " (LOCKED)" if dd["floor_locked"] else ""
+        lock_label = " (LOCKED)" if dd.get("floor_locked") else ""
         cushion_bar_len = 10
-        cushion_filled = min(int(dd["cushion_pct"] / 10), cushion_bar_len)
+        cushion_filled = min(int(dd.get("cushion_pct", 100) / 10), cushion_bar_len)
         cushion_bar = "\U0001F7E9" * cushion_filled + "\U0001F7E5" * (cushion_bar_len - cushion_filled)
         dd_text = (
             f"Floor: **${dd['drawdown_floor']:,.2f}**{lock_label}\n"
-            f"Cushion: ${dd['cushion']:,.2f} ({dd['cushion_pct']:.0f}%)\n"
-            f"{cushion_bar}\n"
-            f"To target (${ dd['profit_target_balance']:,.0f}): **${dd['profit_to_target']:,.2f}**"
+            f"Cushion: ${dd['cushion']:,.2f} ({dd.get('cushion_pct', 100):.0f}%)\n"
+            f"{cushion_bar}"
         )
-        embed.add_field(name="Trailing Drawdown", value=dd_text, inline=False)
+        # Only show profit target for prop firm accounts
+        if dd.get("profit_to_target") and dd.get("profit_target_balance"):
+            dd_text += f"\nTo target (${dd['profit_target_balance']:,.0f}): **${dd['profit_to_target']:,.2f}**"
+        embed.add_field(name="Risk Status", value=dd_text, inline=False)
 
     embed.set_footer(text="LaT-PFN Trading System")
     return embed
@@ -319,14 +344,21 @@ def radar_embed(radar_items: list) -> discord.Embed:
     Each item dict: instrument, direction, confidence, nearest_tier,
     tier_threshold, regime, current_price, forecast_end
     """
+    # Cap at 5 items to stay under Discord's 6000 char embed limit
+    capped_items = radar_items[:5]
+    extra_count = len(radar_items) - len(capped_items)
+    desc = "Top scenarios approaching trade thresholds"
+    if extra_count > 0:
+        desc += f" (+{extra_count} more on radar)"
+
     embed = discord.Embed(
-        title="\U0001F4E1 Trade Radar — Scenarios Building",
-        description="These instruments are approaching trade thresholds",
+        title="\U0001F4E1 Trade Radar",
+        description=desc,
         color=0xF1C40F,  # yellow/amber
         timestamp=datetime.now(timezone.utc),
     )
 
-    for item in radar_items:
+    for item in capped_items:
         inst = item["instrument"]
         direction = item["direction"]
         conf = item["confidence"]
@@ -347,24 +379,12 @@ def radar_embed(radar_items: list) -> discord.Embed:
             "short": "\U0001F534",
         }.get(direction, "\u26AA")
 
-        # Strategy theory for this tier
-        explainer = get_tier_explainer(tier_key)
-        wiki_url = get_tier_wiki_url(tier_key)
-        theory_line = ""
-        if explainer:
-            theory_line = (
-                f"\n{explainer['emoji']} *{explainer['theory'][:120]}...*"
-                f"\n[\U0001F4D6 Strategy Deep-Dive]({wiki_url})"
-            )
-
         embed.add_field(
             name=f"{dir_emoji} {inst} — {direction.upper()}",
             value=(
-                f"Confidence: **{conf:.1%}** \u2192 needs **{threshold:.0%}** for {tier}\n"
-                f"`{bar}` {progress:.0%} ready\n"
-                f"Gap: {gap:.1%} | Regime: {regime}\n"
-                f"Price: ${item['current_price']:,.2f} \u2192 ${item['forecast_end']:,.2f}"
-                f"{theory_line}"
+                f"**{conf:.1%}** \u2192 {threshold:.0%} for {tier} "
+                f"`{bar}` {progress:.0%}\n"
+                f"${item['current_price']:,.2f} \u2192 ${item['forecast_end']:,.2f} | {regime}"
             ),
             inline=False,
         )
@@ -393,3 +413,246 @@ def execution_alert_content(instrument: str, result: dict, alert_role_id: str = 
         mention = f"<@&{alert_role_id}>" if alert_role_id else "@here"
         return f"{mention} \u2705 **ORDER PLACED** \u2014 {instrument} (ID: {result['orderId']})"
     return f"\u274C **ORDER FAILED** \u2014 {instrument}"
+
+
+# ── Sniper Mode Embeds ────────────────────────────────────────────
+
+
+def sniper_plan_embed(candidates: list, balance: float) -> discord.Embed:
+    """
+    Build embed showing sniper scan results before execution.
+
+    Args:
+        candidates: List of SniperCandidate objects.
+        balance: Current account balance.
+    """
+    total_risk = sum(c.risk_usd for c in candidates[:2])
+
+    embed = discord.Embed(
+        title="\U0001F3AF Sniper Mode — Scan Results",
+        description=(
+            f"Balance: **${balance:,.2f}** | "
+            f"Risk (top 2): **${total_risk:,.2f}** ({total_risk / balance * 100:.1f}%)"
+        ),
+        color=0xE74C3C,  # red — aggressive mode
+        timestamp=datetime.now(timezone.utc),
+    )
+
+    for i, c in enumerate(candidates[:5]):
+        dir_emoji = "\U0001F7E2" if c.direction == "long" else "\U0001F534"
+        rr = c.reward_usd / c.risk_usd if c.risk_usd > 0 else 0
+
+        # Confidence bar
+        bar_len = 10
+        filled = min(int(c.confidence * bar_len / 0.8), bar_len)  # scale to 80% = full
+        bar = "\u2588" * filled + "\u2591" * (bar_len - filled)
+
+        rank_marker = "\u2B50" if i < 2 else ""  # star for top 2 (will be executed)
+        funding_dir = "+" if c.funding_rate > 0 else ""
+
+        embed.add_field(
+            name=f"{rank_marker}{dir_emoji} #{i+1} {c.instrument} — {c.direction.upper()}",
+            value=(
+                f"Conf: **{c.confidence:.1%}** `{bar}`\n"
+                f"Entry: ${c.entry_price:,.2f} | SL: ${c.stop_loss:,.2f} | TP: ${c.take_profit:,.2f}\n"
+                f"Size: {c.position_size:.4f} | Risk: ${c.risk_usd:,.2f} | R:R {rr:.1f}:1\n"
+                f"Edge: {c.edge_score:.2f} | Chg: {c.price_change_pct:+.1f}% | Fund: {funding_dir}{c.funding_rate*100:.4f}%"
+            ),
+            inline=False,
+        )
+
+    embed.add_field(
+        name="\u2139\uFE0F Action",
+        value="React \u2705 to execute top 2 | \u274C to cancel (15s timeout)",
+        inline=False,
+    )
+
+    embed.set_footer(text="LaT-PFN Sniper Mode \u2014 wide stops, user-managed exits")
+    return embed
+
+
+def sniper_result_embed(results: list, balance: float) -> discord.Embed:
+    """
+    Build embed showing sniper execution results.
+
+    Args:
+        results: List of dicts with 'candidate' and 'order_result'.
+        balance: Account balance after execution.
+    """
+    success_count = sum(1 for r in results if r.get("order_result"))
+    total_risk = sum(r["candidate"].risk_usd for r in results if r.get("order_result"))
+
+    color = 0x2ECC71 if success_count > 0 else 0xE74C3C
+
+    embed = discord.Embed(
+        title=f"\U0001F3AF Sniper Executed — {success_count}/{len(results)} Orders Placed",
+        description=f"Balance: **${balance:,.2f}** | Total risk: **${total_risk:,.2f}**",
+        color=color,
+        timestamp=datetime.now(timezone.utc),
+    )
+
+    for r in results:
+        c = r["candidate"]
+        order = r.get("order_result")
+        dir_emoji = "\U0001F7E2" if c.direction == "long" else "\U0001F534"
+
+        if order and "orderId" in order:
+            embed.add_field(
+                name=f"\u2705 {dir_emoji} {c.instrument} {c.direction.upper()}",
+                value=(
+                    f"Entry: ${c.entry_price:,.2f} | SL: ${c.stop_loss:,.2f}\n"
+                    f"Size: {c.position_size:.4f} | Risk: ${c.risk_usd:,.2f}\n"
+                    f"Order ID: {order['orderId']}"
+                ),
+                inline=True,
+            )
+        else:
+            error = r.get("error", "Unknown error")
+            embed.add_field(
+                name=f"\u274C {dir_emoji} {c.instrument} {c.direction.upper()}",
+                value=f"Failed: {error}",
+                inline=True,
+            )
+
+    embed.set_footer(text="LaT-PFN Sniper Mode \u2014 manage exits manually via /close")
+    return embed
+
+
+def go_result_embed(result: dict) -> discord.Embed:
+    """
+    Build embed for /go hot-entry results.
+
+    Shows what was scanned, what passed filters, what was executed,
+    and current market context (sentiment, regime, liquidations).
+    """
+    executed = result.get("executed", [])
+    rejected = result.get("rejected", [])
+    errors = result.get("errors", [])
+
+    if executed:
+        color = 0x00FF00  # green — trades placed
+        title = f"\U0001F525 HOT ENTRY \u2014 {len(executed)} Trade{'s' if len(executed) > 1 else ''} Executed"
+    elif result.get("candidates_found", 0) > 0:
+        color = 0xFF8C00  # orange — candidates found but blocked
+        title = "\U0001F525 HOT ENTRY \u2014 Signals Found, Blocked by Risk"
+    else:
+        color = 0x808080  # gray — nothing found
+        title = "\U0001F525 HOT ENTRY \u2014 No Signals"
+
+    embed = discord.Embed(
+        title=title,
+        color=color,
+        timestamp=datetime.now(timezone.utc),
+    )
+
+    # Scan summary
+    scanned = result.get("scanned", 0)
+    candidates = result.get("candidates_found", 0)
+    embed.add_field(
+        name="Scan",
+        value=f"{scanned} pairs scanned \u2192 {candidates} candidates",
+        inline=True,
+    )
+
+    # Balance
+    balance = result.get("balance", 0)
+    embed.add_field(
+        name="Balance",
+        value=f"${balance:,.2f}",
+        inline=True,
+    )
+
+    # Open positions
+    embed.add_field(
+        name="Positions",
+        value=str(result.get("open_positions", 0)),
+        inline=True,
+    )
+
+    # Market context
+    sentiment = result.get("sentiment")
+    if sentiment:
+        val = sentiment.get("value", 50)
+        label = sentiment.get("label", "unknown")
+        # Color-code sentiment
+        if val <= 25:
+            sent_emoji = "\U0001F630"  # fearful face
+        elif val >= 75:
+            sent_emoji = "\U0001F911"  # money face
+        else:
+            sent_emoji = "\U0001F610"  # neutral face
+        embed.add_field(
+            name="Sentiment",
+            value=f"{sent_emoji} {val} ({label})",
+            inline=True,
+        )
+
+    # Liquidation status
+    liq = result.get("liquidation_status")
+    if liq:
+        liq_str = ", ".join(f"{c} {d}" for c, d in liq.items())
+        embed.add_field(
+            name="\u26A0\uFE0F Liquidation Cascades",
+            value=liq_str,
+            inline=False,
+        )
+
+    # Executed trades
+    for trade in executed:
+        dir_emoji = "\U0001F7E2" if trade["direction"] == "long" else "\U0001F534"
+        conf_bar = _confidence_bar(trade["confidence"])
+        funding = trade.get("funding_rate", 0)
+        funding_str = f"  |  Funding: {funding:.4%}" if funding != 0 else ""
+
+        risk_pts = abs(trade["entry_price"] - trade["stop_loss"])
+        reward_pts = abs(trade["take_profit"] - trade["entry_price"])
+        rr = reward_pts / risk_pts if risk_pts > 0 else 0
+
+        embed.add_field(
+            name=f"{dir_emoji} {trade['instrument']} {trade['direction'].upper()}",
+            value=(
+                f"**{trade['shot_type'].replace('_', ' ').title()}**  |  "
+                f"Regime: {trade.get('regime', 'N/A')}\n"
+                f"Confidence: {conf_bar} {trade['confidence']:.1%}\n"
+                f"Entry: ${trade['entry_price']:,.2f}  |  "
+                f"Size: {trade['size']}\n"
+                f"SL: ${trade['stop_loss']:,.2f}  |  "
+                f"TP: ${trade['take_profit']:,.2f}  |  "
+                f"R:R {rr:.1f}:1"
+                f"{funding_str}"
+            ),
+            inline=False,
+        )
+
+    # Rejected signals
+    for rej in rejected[:3]:  # show max 3
+        embed.add_field(
+            name=f"\U0001F6AB {rej['instrument']} {rej['direction'].upper()}",
+            value=f"Conf: {rej['confidence']:.1%} \u2014 {rej.get('reason', 'blocked')}",
+            inline=False,
+        )
+
+    # Errors
+    if errors:
+        embed.add_field(
+            name="Errors",
+            value="\n".join(errors[:3]),
+            inline=False,
+        )
+
+    if not executed and not rejected:
+        embed.description = (
+            "No signals passed the microstructure pipeline.\n"
+            "All pairs were below confidence threshold or filtered out by "
+            "trend/regime/liquidation checks."
+        )
+
+    embed.set_footer(text="LaT-PFN Hot Entry \u2014 full microstructure pipeline")
+    return embed
+
+
+def _confidence_bar(confidence: float, width: int = 10) -> str:
+    """Build a text-based confidence bar like [########--]."""
+    filled = int(confidence * width)
+    empty = width - filled
+    return f"[{'#' * filled}{'-' * empty}]"

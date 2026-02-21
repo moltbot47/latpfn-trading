@@ -14,6 +14,7 @@ def calculate_exits(
     target_multiplier: float = 1.0,
     stop_multiplier: float = 1.0,
     min_rr_override: float | None = None,
+    vol_percentile: float | None = None,
 ) -> tuple[float, float]:
     """
     Determine stop-loss and take-profit prices.
@@ -32,11 +33,21 @@ def calculate_exits(
         target_multiplier: Shot-tier multiplier for target distance (default 1.0).
         stop_multiplier:   Shot-tier multiplier for stop distance (default 1.0).
         min_rr_override:   If set, overrides risk_config min_reward_risk_ratio.
+        vol_percentile:    Realized volatility percentile (0-100). If provided,
+                           dynamically adjusts the ATR multiplier:
+                           Low vol (25th) → 1.25x tighter stops
+                           High vol (90th) → 1.9x wider stops
 
     Returns:
         (stop_loss, take_profit)
     """
     atr_mult = risk_config["stop_loss_atr_multiplier"]
+
+    # Volatility-adaptive stop multiplier
+    if vol_percentile is not None:
+        atr_mult = 1.0 + (vol_percentile / 100.0)
+        # Clamp to reasonable range [1.1, 2.5]
+        atr_mult = max(1.1, min(atr_mult, 2.5))
     min_rr = min_rr_override if min_rr_override is not None else risk_config["min_reward_risk_ratio"]
 
     # Stop distance based on near-term uncertainty (first 10 steps)
@@ -90,6 +101,7 @@ def calculate_scalp_exits(
     min_rr_override: float | None = None,
     forecast_bar_start: int | None = None,
     forecast_bar_end: int | None = None,
+    vol_percentile: float | None = None,
 ) -> tuple[float, float]:
     """
     Scalp exit calculation using near-term forecast (bars 3-12).
@@ -119,6 +131,11 @@ def calculate_scalp_exits(
         if min_rr_override is not None
         else risk_config.get("scalp_min_reward_risk_ratio", 0.3)
     )
+
+    # Volatility-adaptive stop multiplier
+    if vol_percentile is not None:
+        atr_mult = 1.0 + (vol_percentile / 100.0)
+        atr_mult = max(1.1, min(atr_mult, 2.5))
 
     # ── Stop distance (same as standard — near-term uncertainty) ──
     near_unc = float(np.mean(uncertainty[:10]))

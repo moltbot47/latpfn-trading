@@ -1,0 +1,78 @@
+Screen {
+    layout: vertical;
+    background: $surface;
+}
+
+#status-header {
+    dock: top;
+    height: 3;
+    background: $primary-background;
+    color: $text;
+    content-align: center middle;
+    text-style: bold;
+    border-bottom: heavy $primary;
+}
+
+#main-row {
+    layout: horizontal;
+    height: 1fr;
+}
+
+#left-col {
+    width: 60%;
+    layout: vertical;
+}
+
+#open-positions {
+    height: 25%;
+    border: solid $warning;
+    padding: 0 1;
+    overflow-y: auto;
+}
+
+#stats-panel {
+    height: 30%;
+    border: solid $success;
+    padding: 0 1;
+    overflow-y: auto;
+}
+
+#bottom-stats {
+    layout: horizontal;
+    height: 22%;
+}
+
+#asset-perf {
+    width: 55%;
+    border: solid cyan;
+    padding: 0 1;
+    overflow-y: auto;
+}
+
+#pnl-chart {
+    width: 45%;
+    border: solid $error;
+    padding: 0 1;
+}
+
+#hl-intel {
+    height: 23%;
+    border: solid magenta;
+    padding: 0 1;
+    overflow-y: auto;
+}
+
+#trade-feed {
+    width: 40%;
+    border: solid $accent;
+    padding: 0 1;
+    overflow-y: auto;
+}
+
+#trade-feed:focus {
+    border: double $accent;
+}
+
+Footer {
+    background: $primary-background;
+}

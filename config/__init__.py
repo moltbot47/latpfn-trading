@@ -59,6 +59,11 @@ def load_config(path: str = None) -> dict:
         "webhook_url", "https://api.pickmytrade.trade/v2/add-trade-data-latest"
     )
 
+    # Overlay TradersPost webhook URL from environment
+    config.setdefault("traderspost", {})
+    if os.getenv("TRADERSPOST_WEBHOOK_URL"):
+        config["traderspost"]["webhook_url"] = os.getenv("TRADERSPOST_WEBHOOK_URL")
+
     # Overlay Discord bot credentials from environment
     config.setdefault("discord", {})
     config["discord"]["bot_token"] = os.getenv("DISCORD_BOT_TOKEN", "")
@@ -73,6 +78,13 @@ def load_config(path: str = None) -> dict:
     log_level = os.getenv("LOG_LEVEL")
     if log_level:
         config["system"]["log_level"] = log_level
+
+    # Overlay Polymarket credentials from environment
+    config.setdefault("polymarket", {})
+    # (Credentials are read directly from env in polymarket/client.py,
+    #  but we surface them in config for visibility)
+    if os.getenv("POLYMARKET_PRIVATE_KEY"):
+        config["polymarket"]["_has_credentials"] = True
 
     # Account equity override from environment (actual Tradovate balance)
     equity_env = os.getenv("ACCOUNT_EQUITY")

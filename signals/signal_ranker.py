@@ -14,6 +14,8 @@ Higher score = higher priority for execution.
 import logging
 from typing import Dict, List, Optional, Tuple
 
+from signals.time_boost import get_time_boost
+
 logger = logging.getLogger(__name__)
 
 # Tier priority weights — higher tiers are more desirable
@@ -57,6 +59,7 @@ def rank_signals(
     candidates: List[dict],
     open_positions: Dict,
     available_slots: int,
+    config: Optional[dict] = None,
 ) -> List[dict]:
     """
     Rank candidate signals and return the best ones that fit available slots.
@@ -114,8 +117,18 @@ def rank_signals(
         adx = regime_info.get("adx", 20)
         adx_bonus = 1.0 + min(max(adx - 25, 0), 25) / 100  # up to +25% for ADX 50+
 
+        # Time-of-day bonus: prioritize signals during high-edge windows
+        time_bonus = 1.0
+        time_window = ""
+        if config is not None:
+            try:
+                time_mult, time_window = get_time_boost(instrument, config)
+                time_bonus = 1.0 + (time_mult - 1.0) * 0.5  # half the boost as ranking bonus
+            except Exception:
+                pass
+
         # Composite score
-        score = confidence * tier_w * regime_w * diversification_bonus * adx_bonus
+        score = confidence * tier_w * regime_w * diversification_bonus * adx_bonus * time_bonus
 
         cand["rank_score"] = round(score, 4)
         cand["rank_details"] = {
@@ -125,6 +138,8 @@ def rank_signals(
             "regime_weight": regime_w,
             "diversification_bonus": diversification_bonus,
             "adx_bonus": round(adx_bonus, 2),
+            "time_bonus": round(time_bonus, 2),
+            "time_window": time_window,
             "asset_class": asset_class,
         }
         scored.append(cand)
@@ -142,14 +157,17 @@ def rank_signals(
         )
         for i, s in enumerate(scored):
             marker = ">>>" if s in selected else "   "
+            time_str = f" time={s['rank_details']['time_window']}" if s["rank_details"].get("time_window") else ""
             logger.info(
-                "  %s #%d %s: score=%.4f (conf=%.3f tier=%s regime=%s div=%.2f adx=%.2f)",
+                "  %s #%d %s: score=%.4f (conf=%.3f tier=%s regime=%s div=%.2f adx=%.2f time=%.2f%s)",
                 marker, i + 1, s["instrument"], s["rank_score"],
                 s["rank_details"]["confidence"],
                 s["signal"].shot_type,
                 s["rank_details"]["regime"],
                 s["rank_details"]["diversification_bonus"],
                 s["rank_details"]["adx_bonus"],
+                s["rank_details"].get("time_bonus", 1.0),
+                time_str,
             )
 
     return selected

@@ -41,7 +41,8 @@ def main():
     config = load_config(args.config)
 
     if args.dry_run:
-        config.setdefault("execution", {})["mode"] = "dry_run"
+        # Preserve the configured mode (for instrument selection) but disable execution
+        config.setdefault("execution", {})["dry_run"] = True
 
     system = TradingSystem(config)
     asyncio.run(system.start())

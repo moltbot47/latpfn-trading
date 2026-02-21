@@ -56,6 +56,7 @@ class SignalGenerator:
         self,
         instrument: str,
         prediction: dict,
+        vol_percentile: float | None = None,
     ) -> Optional[TradingSignal]:
         """
         Evaluate a prediction and produce a signal if conditions are met.
@@ -75,7 +76,7 @@ class SignalGenerator:
             logger.debug("%s: neutral direction, skipping", instrument)
             return None
 
-        # Composite confidence
+        # Composite confidence (with optional funding rate/OI from Hyperliquid)
         confidence = score_confidence(
             model_confidence=prediction["confidence"],
             forecast=prediction["forecast_prices"],
@@ -83,6 +84,9 @@ class SignalGenerator:
             current_price=prediction["current_price"],
             regime=prediction["regime"],
             signal_config=self.signal_config,
+            funding_rate=prediction.get("funding_rate", 0.0),
+            open_interest=prediction.get("open_interest", 0.0),
+            direction=direction,
         )
 
         # Absolute floor check
@@ -137,6 +141,7 @@ class SignalGenerator:
                 min_rr_override=min_rr_override,
                 forecast_bar_start=tier_bar_start,
                 forecast_bar_end=tier_bar_end,
+                vol_percentile=vol_percentile,
             )
         else:
             stop_loss, take_profit = calculate_exits(
@@ -148,6 +153,7 @@ class SignalGenerator:
                 target_multiplier=target_multiplier,
                 stop_multiplier=stop_multiplier,
                 min_rr_override=min_rr_override,
+                vol_percentile=vol_percentile,
             )
 
         # Preliminary position size (risk manager will refine with size_multiplier)

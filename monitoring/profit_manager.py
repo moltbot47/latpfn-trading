@@ -36,6 +36,8 @@ DEFAULT_PROFIT_CONFIG = {
     "slot_free_min_profit_pct": 0.25,  # Must be 25%+ toward TP to close for slot
     "trailing_stop_activation_pct": 0.50,  # Activate trail at 50% of TP
     "trailing_stop_distance_pct": 0.40,    # Trail distance = 40% of total TP target
+    "scale_out_pct": 0.50,         # Partial close at 50% of TP
+    "scale_out_fraction": 0.50,    # Close 50% of position
 }
 
 # Scalp mode: tighter thresholds for fast near-term profit capture
@@ -46,6 +48,8 @@ SCALP_PROFIT_CONFIG = {
     "slot_free_min_profit_pct": 0.15,  # close for slot at 15% (vs 25%)
     "trailing_stop_activation_pct": 0.30,  # activate trail at 30% (vs 50%)
     "trailing_stop_distance_pct": 0.20,    # trail 20% of TP distance (vs 40%)
+    "scale_out_pct": 0.40,         # partial close at 40% (vs 50%)
+    "scale_out_fraction": 0.50,    # close 50% of position
 }
 
 
@@ -242,6 +246,26 @@ def _evaluate_position(
                         f"Locking in ${pnl_dollars:+.2f} est. profit."
                     ),
                 )
+
+    # ── Partial close (scale-out) at 50% of TP ──────────────────
+    # Close half the position at 50% of TP, move SL to breakeven.
+    # Only triggers once (scale_out_done flag prevents repeats).
+    scale_out_pct = cfg.get("scale_out_pct", 0.50)  # trigger at 50% of TP
+    scale_out_fraction = cfg.get("scale_out_fraction", 0.50)  # close 50%
+    if (
+        pnl_pct_of_target >= scale_out_pct
+        and not getattr(pos, "scale_out_done", False)
+        and hold_minutes >= cfg.get("min_hold_minutes", 15)
+    ):
+        return _build_action(
+            pos, "partial_close", current_price, pnl_pct_of_target, pnl_dollars,
+            reason=(
+                f"Scale-out: position at {pnl_pct_of_target:.0%} of TP target "
+                f"(threshold: {scale_out_pct:.0%}). "
+                f"Closing {scale_out_fraction:.0%} to lock in ${pnl_dollars * scale_out_fraction:+.2f} est. "
+                f"Moving SL to breakeven on remaining."
+            ),
+        )
 
     # ── Decision logic (highest priority first) ──────────────────
 

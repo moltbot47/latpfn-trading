@@ -17,6 +17,9 @@ def score_confidence(
     current_price: float,
     regime: str,
     signal_config: dict,
+    funding_rate: float = 0.0,
+    open_interest: float = 0.0,
+    direction: str = "",
 ) -> float:
     """
     Compute composite confidence score in [0, 1].
@@ -28,6 +31,9 @@ def score_confidence(
         current_price:    Current market price.
         regime:           'trending', 'ranging', or 'volatile'.
         signal_config:    config['signal'] section.
+        funding_rate:     Current funding rate (positive = longs pay shorts).
+        open_interest:    Current open interest in USD.
+        direction:        Predicted direction ('long' or 'short').
 
     Returns:
         Composite confidence score.
@@ -60,4 +66,25 @@ def score_confidence(
     multipliers = signal_config["regime_multipliers"]
     regime_mult = multipliers.get(regime, 1.0)
 
-    return float(max(0.0, min(raw_score * regime_mult, 1.0)))
+    score = raw_score * regime_mult
+
+    # 4. Funding rate edge (Hyperliquid-specific)
+    # If funding is positive (longs pay shorts) and we're going short → boost
+    # If funding is negative (shorts pay longs) and we're going long → boost
+    # Opposite = penalty. This captures "being paid to hold" edge.
+    if funding_rate != 0.0 and direction:
+        # Annualized funding impact: rate * 3 * 365 (funding every 8h)
+        # Typical rates: 0.0001 = 0.01% per 8h = 10.95% annual
+        funding_annual = abs(funding_rate) * 3 * 365
+        funding_boost = min(funding_annual * 0.5, 0.10)  # cap at +/- 10% score
+
+        funding_favors_direction = (
+            (funding_rate > 0 and direction == "short") or
+            (funding_rate < 0 and direction == "long")
+        )
+        if funding_favors_direction:
+            score *= (1.0 + funding_boost)
+        else:
+            score *= (1.0 - funding_boost * 0.5)  # smaller penalty for unfavorable
+
+    return float(max(0.0, min(score, 1.0)))

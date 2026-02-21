@@ -127,7 +127,9 @@ class DataPipeline:
         inst_cfg = self.config["instruments"][instrument]
 
         # Fetch target instrument (rate-limited)
-        heldout_df = _rate_limited_fetch(instrument, bars=total_bars, interval=interval)
+        # Use yfinance_ticker if configured (e.g. "BTC-USD" for Hyperliquid "BTC")
+        ticker = inst_cfg.get("yfinance_ticker", instrument)
+        heldout_df = _rate_limited_fetch(ticker, bars=total_bars, interval=interval)
 
         # Fetch context assets
         context_dfs = {}

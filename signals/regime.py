@@ -1,5 +1,5 @@
 """
-Market-data-based regime detection.
+Market-data-based regime detection with persistence tracking.
 
 Classifies the current market state using observed price data and
 volatility indicators rather than forecast shape. This provides
@@ -10,6 +10,8 @@ Methods:
   1. Realized volatility percentile (20-day vol vs. 1-year distribution)
   2. ADX (Average Directional Index) for trend strength
   3. VIX level (if available in context data)
+  4. Regime persistence: boost/penalize based on how long regime has held
+  5. Funding squeeze detection (crypto-specific): high funding rate
 
 The regime is used to scale position sizing, NOT signal confidence,
 per quant best practice.
@@ -21,26 +23,97 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+# ── Regime persistence tracker ──────────────────────────────────────
+# Tracks how many consecutive cycles each instrument stays in the same regime.
+# After 10+ cycles in "trending", we boost the confidence multiplier.
+# If regime flips frequently (choppy), we penalize.
+_regime_history: dict[str, list[str]] = {}  # instrument → last N regime labels
+PERSISTENCE_WINDOW = 15  # track last 15 cycles
+TRENDING_PERSISTENCE_THRESHOLD = 10  # 10+ cycles = persistent trend
+CHOPPY_FLIP_THRESHOLD = 5  # 5+ flips in 15 cycles = choppy
+
+
+def get_regime_persistence(instrument: str, current_regime: str) -> dict:
+    """
+    Track regime persistence and return adjustment factors.
+
+    Args:
+        instrument: Instrument name.
+        current_regime: Current regime classification.
+
+    Returns:
+        {
+            "persistence_cycles": int,  # consecutive cycles in current regime
+            "confidence_mult": float,   # 0.85 to 1.10 adjustment
+            "is_choppy": bool,          # True if frequent regime flips
+        }
+    """
+    if instrument not in _regime_history:
+        _regime_history[instrument] = []
+
+    history = _regime_history[instrument]
+    history.append(current_regime)
+
+    # Trim to window
+    if len(history) > PERSISTENCE_WINDOW:
+        _regime_history[instrument] = history[-PERSISTENCE_WINDOW:]
+        history = _regime_history[instrument]
+
+    # Count consecutive current regime from end
+    persistence = 0
+    for r in reversed(history):
+        if r == current_regime:
+            persistence += 1
+        else:
+            break
+
+    # Count regime flips in window
+    flips = 0
+    for i in range(1, len(history)):
+        if history[i] != history[i - 1]:
+            flips += 1
+
+    is_choppy = flips >= CHOPPY_FLIP_THRESHOLD and len(history) >= PERSISTENCE_WINDOW // 2
+
+    # Confidence multiplier
+    conf_mult = 1.0
+    if current_regime == "trending" and persistence >= TRENDING_PERSISTENCE_THRESHOLD:
+        conf_mult = 1.10  # 10% boost for persistent trends
+    elif is_choppy:
+        conf_mult = 0.85  # 15% penalty for choppy conditions
+
+    return {
+        "persistence_cycles": persistence,
+        "confidence_mult": conf_mult,
+        "is_choppy": is_choppy,
+        "flips_in_window": flips,
+    }
+
 
 def detect_regime(
     price_df: pd.DataFrame,
     vix_df: pd.DataFrame | None = None,
+    instrument: str = "",
+    funding_rate: float = 0.0,
 ) -> dict:
     """
     Detect market regime from observed price data.
 
     Args:
-        price_df: OHLCV DataFrame for the target instrument (needs 60+ rows).
-        vix_df:   Optional VIX OHLCV DataFrame for volatility context.
+        price_df:     OHLCV DataFrame for the target instrument (needs 60+ rows).
+        vix_df:       Optional VIX OHLCV DataFrame for volatility context.
+        instrument:   Instrument name (for regime persistence tracking).
+        funding_rate: Current funding rate (crypto-specific, for squeeze detection).
 
     Returns:
         {
-            "regime": str,           # "trending" | "ranging" | "volatile"
+            "regime": str,           # "trending" | "ranging" | "volatile" | "funding_squeeze"
             "adx": float,            # 0-100, trend strength
             "realized_vol_pctile": float,  # 0-100, where current vol sits historically
             "vix_level": float | None,     # current VIX if available
             "vix_percentile": float | None, # VIX vs. recent history
-            "size_multiplier": float,       # 0.5-1.0, regime-based sizing adjustment
+            "size_multiplier": float,       # 0.4-1.0, regime-based sizing adjustment
+            "persistence": dict | None,     # regime persistence data
         }
     """
     close = price_df["Close"].values
@@ -59,14 +132,32 @@ def detect_regime(
     if vix_df is not None and len(vix_df) >= 60:
         vix_close = vix_df["Close"].values
         vix_level = float(vix_close[-1])
-        # Percentile over last ~1 year of VIX data
         if len(vix_close) >= 60:
             vix_pctile = float(
                 np.sum(vix_close[-252:] <= vix_level) / min(len(vix_close), 252) * 100
             )
 
+    # 4. Funding squeeze detection (crypto-specific)
+    # Funding rate > 0.1% per 8h (0.001) = extreme long crowding
+    # Funding rate < -0.1% per 8h (-0.001) = extreme short crowding
+    is_funding_squeeze = abs(funding_rate) > 0.001
+
     # Classify regime
-    regime, size_mult = _classify(adx, vol_pctile, vix_pctile)
+    if is_funding_squeeze:
+        regime = "funding_squeeze"
+        # Funding squeeze: reduce size, the crowded side will likely get squeezed
+        size_mult = 0.6
+    else:
+        regime, size_mult = _classify(adx, vol_pctile, vix_pctile)
+
+    # 5. Regime persistence tracking
+    persistence = None
+    if instrument:
+        persistence = get_regime_persistence(instrument, regime)
+        # Apply persistence confidence multiplier to size multiplier
+        if persistence["is_choppy"]:
+            size_mult *= 0.85
+            size_mult = max(size_mult, 0.4)
 
     return {
         "regime": regime,
@@ -75,6 +166,7 @@ def detect_regime(
         "vix_level": round(vix_level, 2) if vix_level is not None else None,
         "vix_percentile": round(vix_pctile, 1) if vix_pctile is not None else None,
         "size_multiplier": size_mult,
+        "persistence": persistence,
     }
 
 
@@ -88,11 +180,19 @@ def _classify(
 
     Returns (regime_name, size_multiplier).
 
-    Size multiplier scales position size:
-      - trending: 1.0 (full size — trends are where money is made)
-      - ranging: 0.75 (reduced — mean-reversion prone, smaller moves)
-      - volatile: 0.5 (half size — wider stops needed, protect capital)
+    Size multiplier is continuous (inverse of volatility percentile):
+      - Low vol (25th): ~1.0 (full size)
+      - Med vol (50th): ~0.75
+      - High vol (90th): ~0.45 (much smaller — wider stops eat more risk)
+
+    Formula: size_mult = 50 / max(vol_pctile, 25)
+    Clamped to [0.4, 1.0].
     """
+    # Continuous volatility-inverse sizing
+    vol_for_sizing = max(vol_pctile, 25.0)  # floor at 25th to avoid >1.0 multiplier
+    size_mult = 50.0 / vol_for_sizing
+    size_mult = max(0.4, min(size_mult, 1.0))
+
     # Volatile: high realized vol OR high VIX
     is_volatile = vol_pctile > 80
     if vix_pctile is not None:
@@ -102,11 +202,12 @@ def _classify(
     is_trending = adx > 25
 
     if is_volatile:
-        return "volatile", 0.5
+        return "volatile", size_mult
     elif is_trending:
-        return "trending", 1.0
+        # Trending gets a bonus — cap at 1.0
+        return "trending", min(size_mult * 1.2, 1.0)
     else:
-        return "ranging", 0.75
+        return "ranging", size_mult
 
 
 def _realized_vol_percentile(

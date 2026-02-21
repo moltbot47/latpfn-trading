@@ -652,6 +652,178 @@ class TradeLogger:
             return {}
 
     # ------------------------------------------------------------------
+    # Confidence calibration
+    # ------------------------------------------------------------------
+
+    def compute_brier_score(self, days: int = 30) -> Dict[str, Any]:
+        """
+        Compute Brier score for confidence calibration.
+
+        Brier score = mean((confidence - outcome)^2) where outcome is 1 for
+        winning trades and 0 for losing trades. Lower is better (0 = perfect).
+
+        Returns:
+            Dict with overall brier_score, per-tier scores, and calibration
+            buckets (confidence range vs actual win rate).
+        """
+        conn = self._get_conn()
+        if conn is None:
+            return {}
+
+        try:
+            from datetime import timedelta
+            cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+
+            rows = conn.execute(
+                """
+                SELECT t.shot_tier, t.pnl_dollars,
+                       p.composite_confidence
+                  FROM trades t
+                  JOIN predictions p ON t.prediction_id = p.id
+                 WHERE t.timestamp >= ?
+                   AND t.execution_status = 'executed'
+                   AND t.pnl_dollars IS NOT NULL
+                   AND p.composite_confidence IS NOT NULL
+                 ORDER BY t.timestamp
+                """,
+                (cutoff,),
+            ).fetchall()
+
+            if not rows:
+                return {"brier_score": None, "trade_count": 0}
+
+            # Overall Brier score
+            squared_errors = []
+            tier_data: Dict[str, list] = {}
+            buckets: Dict[str, Dict] = {}
+
+            for row in rows:
+                r = dict(row)
+                conf = r["composite_confidence"]
+                outcome = 1.0 if r["pnl_dollars"] > 0 else 0.0
+                se = (conf - outcome) ** 2
+                squared_errors.append(se)
+
+                # Per-tier
+                tier = r.get("shot_tier", "unknown") or "unknown"
+                if tier not in tier_data:
+                    tier_data[tier] = []
+                tier_data[tier].append((conf, outcome))
+
+                # Calibration buckets (10% bins)
+                bucket_key = f"{int(conf * 10) * 10}-{int(conf * 10) * 10 + 10}%"
+                if bucket_key not in buckets:
+                    buckets[bucket_key] = {"count": 0, "wins": 0, "avg_conf": 0.0}
+                buckets[bucket_key]["count"] += 1
+                buckets[bucket_key]["wins"] += int(outcome)
+                buckets[bucket_key]["avg_conf"] += conf
+
+            # Finalize buckets
+            for bk, bv in buckets.items():
+                bv["win_rate"] = bv["wins"] / bv["count"] if bv["count"] > 0 else 0.0
+                bv["avg_conf"] = bv["avg_conf"] / bv["count"] if bv["count"] > 0 else 0.0
+
+            # Per-tier Brier scores
+            tier_brier = {}
+            for tier, data in tier_data.items():
+                tier_se = [(c - o) ** 2 for c, o in data]
+                confs = [c for c, _ in data]
+                wins = sum(1 for _, o in data if o > 0)
+                tier_brier[tier] = {
+                    "brier_score": sum(tier_se) / len(tier_se),
+                    "count": len(data),
+                    "win_rate": wins / len(data),
+                    "avg_confidence": sum(confs) / len(confs),
+                }
+
+            return {
+                "brier_score": sum(squared_errors) / len(squared_errors),
+                "trade_count": len(squared_errors),
+                "per_tier": tier_brier,
+                "calibration_buckets": buckets,
+            }
+
+        except Exception as e:
+            logger.error("Failed to compute Brier score: %s", e, exc_info=True)
+            return {}
+
+    def get_tier_edge_stats(self, days: int = 30) -> Dict[str, Dict]:
+        """
+        Get per-tier edge statistics for Kelly criterion calculation.
+
+        Returns dict keyed by tier with win_rate, avg_win, avg_loss, and
+        suggested kelly_fraction (quarter-Kelly for safety).
+        """
+        conn = self._get_conn()
+        if conn is None:
+            return {}
+
+        try:
+            from datetime import timedelta
+            cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+
+            rows = conn.execute(
+                """
+                SELECT shot_tier, pnl_dollars, risk_dollars
+                  FROM trades
+                 WHERE timestamp >= ?
+                   AND execution_status = 'executed'
+                   AND pnl_dollars IS NOT NULL
+                   AND risk_dollars > 0
+                """,
+                (cutoff,),
+            ).fetchall()
+
+            tier_data: Dict[str, Dict] = {}
+
+            for row in rows:
+                r = dict(row)
+                tier = r.get("shot_tier", "unknown") or "unknown"
+                if tier not in tier_data:
+                    tier_data[tier] = {"wins": [], "losses": [], "count": 0}
+                tier_data[tier]["count"] += 1
+                if r["pnl_dollars"] > 0:
+                    tier_data[tier]["wins"].append(r["pnl_dollars"])
+                else:
+                    tier_data[tier]["losses"].append(abs(r["pnl_dollars"]))
+
+            result = {}
+            for tier, data in tier_data.items():
+                count = data["count"]
+                wins = data["wins"]
+                losses = data["losses"]
+
+                win_rate = len(wins) / count if count > 0 else 0.0
+                avg_win = sum(wins) / len(wins) if wins else 0.0
+                avg_loss = sum(losses) / len(losses) if losses else 0.0
+
+                # Kelly fraction: f* = (bp - q) / b
+                # where b = avg_win/avg_loss, p = win_rate, q = 1-p
+                if avg_loss > 0 and count >= 10:
+                    b = avg_win / avg_loss
+                    kelly = (b * win_rate - (1 - win_rate)) / b
+                    kelly = max(kelly, 0.0)  # negative kelly = no edge
+                    kelly_quarter = kelly * 0.25  # quarter-Kelly for safety
+                else:
+                    kelly = 0.0
+                    kelly_quarter = 0.0
+
+                result[tier] = {
+                    "count": count,
+                    "win_rate": win_rate,
+                    "avg_win": avg_win,
+                    "avg_loss": avg_loss,
+                    "kelly_fraction": kelly,
+                    "kelly_quarter": kelly_quarter,
+                }
+
+            return result
+
+        except Exception as e:
+            logger.error("Failed to compute tier edge stats: %s", e, exc_info=True)
+            return {}
+
+    # ------------------------------------------------------------------
     # Cleanup
     # ------------------------------------------------------------------
 

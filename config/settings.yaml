@@ -1,6 +1,6 @@
 system:
-  mode: paper          # paper | live
-  environment: demo    # demo | production
+  mode: live          # paper | live
+  environment: production    # demo | production
   log_level: INFO
   log_dir: ./logs
 
@@ -36,7 +36,7 @@ instruments:
     # Backtest 02/12 confirmation: 26 trades, 34.6% WR, -$452, PF 0.45
     # Both tiers losing in isolation: three_pointer (PF 0.25), half_court (PF 0.84)
     # WARNING: MYM model has weak/inconsistent edge — monitor closely
-    allowed_tiers: [three_pointer, half_court]
+    allowed_tiers: [dunk, alley_oop, layup, short_range, free_throw, three_pointer, half_court]
     context_assets:
       - "SPY"    # S&P 500 ETF
       - "DIA"    # Dow ETF
@@ -57,7 +57,8 @@ instruments:
     # Backtest 02/12: 41 trades, PF 1.56, +$1538
     # Winners: layup, short_range, free_throw, three_pointer
     # half_court confirmed 0% WR, -$1087 in confirmation run — removed
-    allowed_tiers: [dunk, alley_oop, layup, short_range, free_throw, three_pointer]
+    # PF backtest: free_throw PF 0.20 (standard), 0.25 (scalp) — removed
+    allowed_tiers: [dunk, alley_oop, layup, short_range, three_pointer]
     context_assets:
       - "QQQ"    # Nasdaq ETF
       - "SPY"    # S&P 500 ETF
@@ -151,45 +152,27 @@ instruments:
       - "GLD"         # Gold (alternative store of value)
       - "DX-Y.NYB"    # Dollar index (inverse correlation)
 
-  MET:
-    name: "Micro Ether Futures"
-    yfinance_ticker: "ETH-USD"
-    tradovate_symbol: "MET"
-    contract_size: 0.10     # $0.10 per point (1/10 ETH)
-    tick_size: 0.50         # 0.50 index points per tick
-    tick_value: 0.05        # $0.05 per tick
-    # Backtest 02/16: 13 trades, 69.2% WR, PF 0.66
-    # layup PF 99 (1 trade), short_range PF 1.23, free_throw PF 0.23 (losing)
-    allowed_tiers: [dunk, layup, short_range]
-    context_assets:
-      - "BTC-USD"     # Bitcoin (lead indicator for crypto)
-      - "COIN"        # Coinbase
-      - "QQQ"         # Nasdaq
-      - "SPY"         # S&P 500
-      - "^VIX"        # Volatility
-      - "XLK"         # Tech sector
-      - "ARKK"        # Innovation ETF (risk-on proxy)
-      - "DX-Y.NYB"    # Dollar index
+  # MET: DISABLED — PF backtest 02/19: scalp PF 0.58, standard PF 0.29. No edge in either mode.
+  # MET:
+  #   name: "Micro Ether Futures"
+  #   yfinance_ticker: "ETH-USD"
+  #   tradovate_symbol: "MET"
+  #   contract_size: 0.10
+  #   tick_size: 0.50
+  #   tick_value: 0.05
+  #   allowed_tiers: [dunk, layup, short_range]
+  #   context_assets: ["BTC-USD","COIN","QQQ","SPY","^VIX","XLK","ARKK","DX-Y.NYB"]
 
-  "10Y":
-    name: "Micro 10-Year Note Futures"
-    yfinance_ticker: "ZN=F"          # Full-size 10Y note futures
-    tradovate_symbol: "10Y"
-    contract_size: 10.0     # $10 per point
-    tick_size: 0.015625     # 1/64 of a point
-    tick_value: 0.15625     # $0.15625 per tick
-    # Backtest 02/16: 26 trades, 80.8% WR, PF 2.04
-    # layup PF 2.09, short_range PF 99, three_pointer PF 99, free_throw PF 0.80 (losing)
-    allowed_tiers: [dunk, alley_oop, layup, short_range, three_pointer]
-    context_assets:
-      - "^TNX"        # 10-Year yield (inverse)
-      - "^TYX"        # 30-Year yield
-      - "TLT"         # 20+ Year Treasury ETF
-      - "IEF"         # 7-10 Year Treasury ETF
-      - "SPY"         # Equities (inverse correlation)
-      - "^VIX"        # Volatility
-      - "DX-Y.NYB"    # Dollar index
-      - "GLD"         # Gold (safe haven correlation)
+  # 10Y: DISABLED — PF backtest 02/19: PF 0.00 both modes. Slippage destroys all profit.
+  # "10Y":
+  #   name: "Micro 10-Year Note Futures"
+  #   yfinance_ticker: "ZN=F"
+  #   tradovate_symbol: "10Y"
+  #   contract_size: 10.0
+  #   tick_size: 0.015625
+  #   tick_value: 0.15625
+  #   allowed_tiers: [dunk, alley_oop, layup, short_range, three_pointer]
+  #   context_assets: ["^TNX","^TYX","TLT","IEF","SPY","^VIX","DX-Y.NYB","GLD"]
 
   # ── DISABLED INSTRUMENTS ──────────────────────────────────
 
@@ -241,11 +224,11 @@ instruments:
   #   context_assets: ["FXY","DX-Y.NYB","^VIX","^TNX","EWJ","UUP","GLD","SPY"]
 
 risk:
-  max_risk_per_trade_pct: 2.0    # 2% of account equity ($1000 on $50k)
-  max_position_size_contracts: 5   # micros are 1/10th size, can safely trade more
+  max_risk_per_trade_pct: 15.0   # 15% of account equity (aggressive — manual oversight, watching closely)
+  max_position_size_contracts: 20  # high cap for crypto fractional sizing
   max_daily_loss_pct: 3.0
   max_drawdown_pct: 10.0
-  max_concurrent_positions: 6
+  max_concurrent_positions: 10
   stop_loss_atr_multiplier: 1.5
   min_reward_risk_ratio: 1.5
   scalp_min_reward_risk_ratio: 0.3  # global floor for scalp mode
@@ -256,8 +239,8 @@ risk:
   # 1 MNQ=$2/pt = 0.4 MES-eq, 1 MYM=$0.50/pt = 0.1 MES-eq
   # 1 MES=$5/pt = 1.0 MES-eq, 1 MBT=$0.10/pt = 0.02 MES-eq
   # 1 10Y=$10/pt = 2.0 MES-eq
-  max_net_mes_equivalent: 8.0     # Max net directional exposure (raised for crypto/bonds)
-  max_gross_mes_equivalent: 12.0  # Max total (long+short) exposure
+  max_net_mes_equivalent: 15.0    # Raised from 8.0 — was blocking MES every cycle
+  max_gross_mes_equivalent: 25.0  # Raised from 12.0 — allow 3-4 concurrent positions
 
   prop_firm:
     starting_balance: 50000      # Account starting balance
@@ -270,13 +253,22 @@ risk:
     max_risk_reward_ratio: 5.0   # Apex 5:1 max risk-to-reward
     mae_pct: 0.30                # 30% MAE rule — max unrealized loss per trade
     consistency_pct: 0.30        # 30% consistency rule — max single day as % of total
+    daily_profit_cap_usd: 1660   # Match biggest day ($1,660.25) — don't create a new worst day
+                                  # Ensures consistency rule compliance: no single day dominates total
 
 signal:
   min_confidence: 0.25   # absolute floor (below this = no trade regardless of tier)
+  # Hyperliquid override: crypto is noisier, use lower floor
+  min_confidence_hyperliquid: 0.15
   regime_multipliers:
     trending: 1.15
     ranging: 0.95       # was 0.8 — too punitive since most markets range most of the time
     volatile: 0.75
+  # Hyperliquid regime overrides: crypto is always volatile, don't punish as hard
+  regime_multipliers_hyperliquid:
+    trending: 1.15
+    ranging: 1.0
+    volatile: 0.85       # was 0.75 — crypto vol is normal, not penalizing
   weights:
     model_confidence: 0.4
     trend_clarity: 0.3
@@ -285,7 +277,43 @@ signal:
     enabled: true
     fast_ema_period: 50     # ~4 hours on 5-min bars
     slow_ema_period: 200    # ~16 hours on 5-min bars
-    mode: gate              # gate = hard reject counter-trend signals
+    mode: soft              # gate = hard reject, soft = 0.7x penalty
+    # Hyperliquid override: soft mode applies penalty instead of blocking
+    mode_hyperliquid: soft
+  # ── Time-Based Volatility Boost ──────────────────────────────
+  # Adjusts confidence based on time of day (all times ET).
+  # NYSE open = highest edge, lunch = lowest, power hour = moderate.
+  # Also speeds up cycle interval during hot windows.
+  time_boost:
+    enabled: true
+    fast_cycle_minutes: 2       # cycle speed during hot windows (vs 5min default)
+    fast_cycle_windows: [nyse_open, open_continuation, pre_macro]
+    windows:
+      pre_macro:
+        start: "08:25"
+        end: "08:35"
+        cme_boost: 1.20
+        crypto_boost: 1.15
+      nyse_open:
+        start: "09:30"
+        end: "10:00"
+        cme_boost: 1.25         # +25% confidence during NYSE open
+        crypto_boost: 1.20
+      open_continuation:
+        start: "10:00"
+        end: "10:30"
+        cme_boost: 1.15
+        crypto_boost: 1.10
+      lunch_zone:
+        start: "12:00"
+        end: "14:00"
+        cme_boost: 0.85         # -15% confidence during lunch
+        crypto_boost: 0.90
+      power_hour:
+        start: "15:30"
+        end: "16:00"
+        cme_boost: 1.10
+        crypto_boost: 1.05
 
 # ── NBA Shot-Tier Classification ──────────────────────────────
 # Each tier maps a confidence range to specific trade parameters.
@@ -353,7 +381,7 @@ shot_tiers:
 # standard = current behavior (far-term targets, wide R:R)
 # scalp    = near-term targets, tight R:R, max hold times
 strategy:
-  mode: scalp                  # standard | scalp
+  mode: standard               # standard | scalp — PF backtest: standard 1.58-1.85 vs scalp 0.41-1.55
   scalp:
     forecast_bar_start: 3      # use bars 3-12 for target (vs 50-60)
     forecast_bar_end: 12
@@ -380,7 +408,7 @@ scalp_tiers:
     target_multiplier: 0.10      # 10% of near-term forecast (ultra-tight)
     stop_multiplier: 0.5         # tight stop — fast exit on wrong direction
     size_multiplier: 1.0         # full size (highest confidence)
-    min_reward_risk: 0.12        # needs ~89% WR to breakeven
+    min_reward_risk: 0.25        # must be >= 0.20 for Apex 5:1 R:R compliance
     max_hold_minutes: 10         # close profitable trades after 10 min
     enabled: true
 
@@ -392,7 +420,7 @@ scalp_tiers:
     target_multiplier: 0.15      # 15% of near-term forecast
     stop_multiplier: 0.6
     size_multiplier: 1.0
-    min_reward_risk: 0.18        # needs ~85% WR
+    min_reward_risk: 0.25        # must be >= 0.20 for Apex 5:1 R:R compliance
     max_hold_minutes: 15
     enabled: true
 
@@ -447,20 +475,28 @@ scalp_tiers:
     enabled: true
 
 # ── Execution Mode ───────────────────────────────────────────
-# pickmytrade = webhook to PickMyTrade (works with Apex prop firm)
+# traderspost = webhook to TradersPost (works with Apex prop firm via Tradovate)
+# pickmytrade = webhook to PickMyTrade (trial expired)
 # tradovate   = direct Tradovate API (requires paid API access)
 # dry_run     = predictions only, no orders placed
 execution:
-  mode: pickmytrade    # pickmytrade | tradovate | dry_run
-  default_equity: 50000  # used when broker can’t report balance
+  mode: traderspost    # traderspost | pickmytrade | tradovate | hyperliquid | dry_run
+  default_equity: 50000  # used when broker can't report balance
   # Confirmation mode: require Discord approval before each trade
   # SET TO true FOR PA/LIVE ACCOUNTS (Apex requires human oversight)
   # Set to false for evaluation accounts (automation more permissive)
   confirmation_mode: false   # false=auto-execute, true=require Discord approval
   confirmation_timeout: 60   # seconds to wait for approval before auto-rejecting
 
+traderspost:
+  webhook_url: "https://webhooks.traderspost.io/trading/webhook/181afda0-f15f-4870-ba52-d0560c5a24f4/01a3f0cf9b6d0f8eccd605a239dec77b"
+  # Auth is embedded in the URL — no separate API key needed
+  # Rate limits: 60 requests/min, 500 requests/hour
+  # Docs: https://docs.traderspost.io/docs/core-concepts/signals/webhooks
+
 pickmytrade:
   webhook_url: "https://api.pickmytrade.trade/v2/add-trade-data-latest"
+  # DEPRECATED: PickMyTrade trial expired. Using TradersPost now.
   # Credentials loaded from environment variables:
   #   PICKMYTRADE_TOKEN      — your webhook token from pickmytrade.trade
   #   PICKMYTRADE_ACCOUNT_ID — your account ID from pickmytrade.trade
@@ -485,3 +521,143 @@ tradovate:
   live_api_url: "https://live.tradovateapi.com/v1"
   live_md_url: "wss://md.tradovateapi.com/v1/websocket"
   live_ws_url: "wss://live.tradovateapi.com/v1/websocket"
+
+# ── Hyperliquid DEX ─────────────────────────────────────────
+# Decentralized perpetual futures on Hyperliquid L1.
+# Parallel execution mode — trades crypto perps with separate capital.
+# Credentials loaded from environment variables:
+#   HYPERLIQUID_PRIVATE_KEY     — wallet private key
+#   HYPERLIQUID_WALLET_ADDRESS  — wallet address
+hyperliquid:
+  enabled: true              # re-enabled — provides intel to turbo via agent bus
+  network: mainnet           # mainnet | testnet
+  default_leverage: 20       # aggressive — manual oversight active
+  order_type: limit          # limit (0.02% maker rebate) vs market (0.035% taker)
+  slippage_tolerance: 0.1    # % offset on limit orders for fill probability
+  account_equity: 30         # separate from Apex equity (updates from live balance)
+  max_concurrent_positions: 15  # more slots = more diversification across pairs
+  daily_loss_limit_pct: 30.0   # 30% = $9 on $30 — aggressive scalping
+  cycle_minutes: 1             # 1-min cycles — max speed with native API
+  top_pairs: 50                # scan 50 pairs — cast wide net for momentum
+
+# ── Hyperliquid Instruments ─────────────────────────────────
+# Used when execution.mode = "hyperliquid"
+# contract_size = 1.0 for all crypto perps (USD notional per coin unit)
+# Add more pairs as you discover edge via backtesting.
+instruments_hyperliquid:
+  BTC:
+    name: "Bitcoin Perpetual"
+    yfinance_ticker: "BTC-USD"
+    contract_size: 1.0
+    tick_size: 0.1
+    tick_value: 0.1
+    allowed_tiers: [dunk, alley_oop, layup, short_range, free_throw, three_pointer]
+    context_assets:
+      - "ETH-USD"
+      - "^VIX"
+      - "SPY"
+      - "QQQ"
+      - "GLD"
+      - "DX-Y.NYB"
+      - "COIN"
+      - "MSTR"
+
+  ETH:
+    name: "Ethereum Perpetual"
+    yfinance_ticker: "ETH-USD"
+    contract_size: 1.0
+    tick_size: 0.01
+    tick_value: 0.01
+    allowed_tiers: [dunk, alley_oop, layup, short_range, free_throw, three_pointer]
+    context_assets:
+      - "BTC-USD"
+      - "^VIX"
+      - "SPY"
+      - "QQQ"
+      - "XLK"
+      - "COIN"
+      - "ARKK"
+      - "DX-Y.NYB"
+
+  SOL:
+    name: "Solana Perpetual"
+    yfinance_ticker: "SOL-USD"
+    contract_size: 1.0
+    tick_size: 0.001
+    tick_value: 0.001
+    allowed_tiers: [dunk, alley_oop, layup, short_range, free_throw]
+    context_assets:
+      - "BTC-USD"
+      - "ETH-USD"
+      - "^VIX"
+      - "SPY"
+      - "QQQ"
+      - "COIN"
+
+# ── Polymarket Prediction Market Trading ─────────────────────────────
+polymarket:
+  enabled: true
+  budget_usdc: 119.71
+  cycle_minutes: 10
+  max_concurrent_positions: 160
+  strategy_limits:
+    resolution_snipe: 5
+    superforecaster: 5
+    max_concurrent: 45
+    crypto_scalp: 3
+    turbo: 100
+  sniper:
+    min_yes_price: 0.85
+    max_yes_price: 0.97
+    max_hours_to_resolution: 48
+    min_volume_24h: 10000
+    max_position_pct: 0.20
+    stop_price: 0.80
+  forecaster:
+    enabled: false               # disabled — saving LLM tokens
+    model: "claude-sonnet-4-6"
+    min_divergence: 0.10
+    max_divergence: 0.40
+    min_market_volume: 5000
+    max_position_pct: 0.15
+    confidence_threshold: 0.70
+    cache_hours: 4
+    max_concurrent_forecasts: 5
+  scalper:
+    enabled: false               # disabled — negative PnL
+    assets: ["btc"]              # Start with BTC, add eth/sol later
+    entry_threshold: 0.82        # Buy when outcome hits 82%+
+    max_entry_price: 0.95        # Don't buy above 95% (too little edge)
+    min_seconds_left: 15         # Don't trade with <15s left (won't fill)
+    max_seconds_left: 120        # Don't trade with >2min left (too uncertain)
+    max_position_pct: 0.15       # Max 15% of budget per scalp
+    shares_per_trade: 10         # Fixed 10 shares per trade (~$8-9)
+    cooldown_windows: 1          # Skip N windows after a trade
+  max_concurrent:
+    enabled: false               # disabled — saving LLM tokens
+    budget_pct: 0.35             # 35% of balance for this strategy
+    bet_size_usdc: 5.0           # ~1% of $482 balance per position
+    min_divergence: 0.07         # Lower threshold than superforecaster (0.10)
+    max_divergence: 0.40
+    max_positions: 45            # Max concurrent positions for this strategy
+    max_trades_per_cycle: 20     # Don't open >20 in one cycle
+    exit_hours: 4                # Time-based exit after 4 hours
+    stop_loss_pct: 30            # Exit if down 30%
+    scan_limit: 100              # Markets to scan (vs 50 for superforecaster)
+    max_concurrent_forecasts: 8  # Parallel LLM calls
+    confidence_threshold: 0.60   # Lower than superforecaster (0.70)
+  turbo:
+    enabled: true
+    poll_seconds: 5                # Tick every 5 seconds
+    bet_size_usdc: 1.0             # Back to $1 — investigating regime-dependent edge loss
+    assets: ["btc", "eth", "sol", "xrp"]  # Crypto assets to trade
+    timeframes: ["5m", "15m"]      # Window durations
+    max_positions: 50              # Max concurrent turbo positions
+    momentum_threshold: 0.0003     # 0.03% min price move for signal
+    min_seconds_left: 30           # Don't trade <30s before close
+    max_seconds_left: 240          # Don't trade >4min before close
+    min_entry_edge: 0.02           # Min edge (buy below 0.52)
+    cooldown_windows: 0            # Skip N windows after trade (0=none)
+    claim_interval_seconds: 300    # Auto-claim every 5 minutes
+  daily_loss_limit_pct: 25.0
+  max_portfolio_exposure: 1.50

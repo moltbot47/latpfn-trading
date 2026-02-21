@@ -7,6 +7,7 @@ and responds to slash commands for status, forecasts, and trade management.
 
 import asyncio
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -24,6 +25,9 @@ from discord_bot.embeds import (
     radar_embed,
     trade_alert_content,
     execution_alert_content,
+    sniper_plan_embed,
+    sniper_result_embed,
+    go_result_embed,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,8 +50,16 @@ class TradingBot(commands.Bot):
         self.signal_channel_id = int(
             config.get("discord", {}).get("channel_id", 0)
         )
+        self.poly_channel_id = int(
+            os.environ.get("POLYMARKET_DISCORD_CHANNEL_ID", 0)
+        )
+        self.hl_channel_id = int(
+            os.environ.get("HYPERLIQUID_DISCORD_CHANNEL_ID", 0)
+        )
         self.alert_role_id = config.get("discord", {}).get("alert_role_id", "")
         self._signal_channel: Optional[discord.TextChannel] = None
+        self._poly_channel: Optional[discord.TextChannel] = None
+        self._hl_channel: Optional[discord.TextChannel] = None
         self._trading_system = None  # set via set_trading_system()
 
     def set_trading_system(self, system):
@@ -66,6 +78,17 @@ class TradingBot(commands.Bot):
         self.tree.add_command(performance_cmd)
         self.tree.add_command(daily_cmd)
         self.tree.add_command(stale_cmd)
+        self.tree.add_command(sniper_cmd)
+        self.tree.add_command(go_cmd)
+        # Polymarket commands
+        self.tree.add_command(poly_scan_cmd)
+        self.tree.add_command(poly_go_cmd)
+        self.tree.add_command(poly_positions_cmd)
+        self.tree.add_command(poly_status_cmd)
+        self.tree.add_command(poly_scalper_cmd)
+        self.tree.add_command(poly_close_cmd)
+        self.tree.add_command(poly_mc_status_cmd)
+        self.tree.add_command(poly_turbo_cmd)
         await self.tree.sync()
         logger.info("Slash commands synced")
 
@@ -83,6 +106,22 @@ class TradingBot(commands.Bot):
         else:
             logger.warning("No discord.channel_id configured — signals won't be posted")
 
+        # Resolve Polymarket channel
+        if self.poly_channel_id:
+            ch = self.get_channel(self.poly_channel_id)
+            if ch is None:
+                ch = await self.fetch_channel(self.poly_channel_id)
+            self._poly_channel = ch
+            logger.info("Polymarket channel: #%s (id=%d)", ch.name, ch.id)
+
+        # Resolve Hyperliquid channel
+        if self.hl_channel_id:
+            ch = self.get_channel(self.hl_channel_id)
+            if ch is None:
+                ch = await self.fetch_channel(self.hl_channel_id)
+            self._hl_channel = ch
+            logger.info("Hyperliquid channel: #%s (id=%d)", ch.name, ch.id)
+
         # Post startup message
         if self._signal_channel:
             embed = discord.Embed(
@@ -96,6 +135,105 @@ class TradingBot(commands.Bot):
             )
             embed.set_footer(text="LaT-PFN Trading System")
             await self._signal_channel.send(embed=embed)
+
+        # Post Polymarket startup message
+        if self._poly_channel:
+            poly_cfg = self.config.get("polymarket", {})
+            embed = discord.Embed(
+                title="Polymarket Bot Online",
+                description=(
+                    f"Budget: ${poly_cfg.get('budget_usdc', 15.0):.2f}\n"
+                    f"Strategies: Resolution Sniping + LLM Superforecaster\n"
+                    f"Cycle: every {poly_cfg.get('cycle_minutes', 10)} min"
+                ),
+                color=0x7B3FE4,
+                timestamp=datetime.now(timezone.utc),
+            )
+            embed.set_footer(text="Polymarket Trading System")
+            await self._poly_channel.send(embed=embed)
+
+    # ── Polymarket notifications ─────────────────────────────────
+
+    async def post_poly_trade(self, trade: dict):
+        """Post a Polymarket trade execution to the poly channel."""
+        if not self._poly_channel:
+            return
+        embed = discord.Embed(
+            title=f"POLY TRADE: {trade.get('direction', '?')} @ ${trade.get('entry_price', 0):.4f}",
+            description=f"**{trade.get('question', '?')[:80]}**",
+            color=0x00CC00,
+            timestamp=datetime.now(timezone.utc),
+        )
+        embed.add_field(name="Size", value=f"${trade.get('size_usdc', 0):.2f}", inline=True)
+        embed.add_field(name="Edge", value=f"{trade.get('edge_pct', 0):.1f}%", inline=True)
+        embed.add_field(name="Hours Left", value=f"{trade.get('hours_to_resolution', 0):.0f}h", inline=True)
+        embed.set_footer(text="Polymarket Resolution Sniper")
+        await self._poly_channel.send(embed=embed)
+
+    async def post_poly_scan_summary(self, result: dict):
+        """Post a scan cycle summary to the poly channel."""
+        if not self._poly_channel:
+            return
+        snipes = result.get("snipe_candidates", [])
+        executed = result.get("executed", [])
+        exits = result.get("exits", [])
+
+        desc_parts = [f"Markets: {result.get('markets_scanned', 0)}"]
+        desc_parts.append(f"Snipe candidates: {len(snipes)}")
+        desc_parts.append(f"Trades executed: {len(executed)}")
+        if exits:
+            desc_parts.append(f"Positions exited: {len(exits)}")
+
+        embed = discord.Embed(
+            title=f"Polymarket Cycle #{result.get('cycle', '?')}",
+            description="\n".join(desc_parts),
+            color=0x7B3FE4,
+            timestamp=datetime.now(timezone.utc),
+        )
+
+        if snipes:
+            top = snipes[0]
+            embed.add_field(
+                name="Top Candidate",
+                value=f"YES ${top['yes_price']:.2f} | edge {top['edge_pct']:.1f}% | {top['hours_to_resolution']:.0f}h\n`{top['question'][:55]}`",
+                inline=False,
+            )
+
+        embed.set_footer(text="Polymarket Trading System")
+        await self._poly_channel.send(embed=embed)
+
+    async def post_poly_exit(self, exit_info: dict):
+        """Post a position exit notification."""
+        if not self._poly_channel:
+            return
+        pnl = exit_info.get("pnl", 0)
+        color = 0x00CC00 if pnl >= 0 else 0xFF4444
+        embed = discord.Embed(
+            title=f"POLY EXIT: P&L ${pnl:+.4f}",
+            description=f"Exit @ ${exit_info.get('exit_price', 0):.4f}",
+            color=color,
+            timestamp=datetime.now(timezone.utc),
+        )
+        embed.set_footer(text="Polymarket Trading System")
+        await self._poly_channel.send(embed=embed)
+
+    async def post_poly_claim(self, claim: dict):
+        """Post auto-claim notification when resolved positions are redeemed."""
+        if not self._poly_channel:
+            return
+        usdc = claim.get("usdc_received", 0)
+        embed = discord.Embed(
+            title=f"AUTO-CLAIM: +${usdc:.2f} USDC",
+            description=(
+                f"**{claim.get('question', 'Unknown')[:80]}**\n"
+                f"Positions resolved: {claim.get('positions_resolved', 0)}\n"
+                f"TX: `{claim.get('tx_hash', '?')[:16]}...`"
+            ),
+            color=0x00AAFF,
+            timestamp=datetime.now(timezone.utc),
+        )
+        embed.set_footer(text="Polymarket Auto-Claim")
+        await self._poly_channel.send(embed=embed)
 
     # ── Signal broadcasting ────────────────────────────────────────
 
@@ -121,18 +259,13 @@ class TradingBot(commands.Bot):
         await self._signal_channel.send(content=content, embed=embed)
 
     async def post_risk_rejection(self, instrument: str, reason: str):
-        """Post risk rejection notice."""
-        if not self._signal_channel:
-            return
-        embed = risk_rejected_embed(instrument, reason)
-        await self._signal_channel.send(embed=embed)
+        """Post risk rejection notice — suppressed to reduce channel noise."""
+        logger.debug("Risk rejection suppressed from Discord: %s — %s", instrument, reason)
+        return
 
     async def post_radar(self, radar_items: list):
-        """Post pre-trade radar — scenarios approaching thresholds."""
-        if not self._signal_channel or not radar_items:
-            return
-        embed = radar_embed(radar_items)
-        await self._signal_channel.send(embed=embed)
+        """Post pre-trade radar — suppressed to reduce channel noise."""
+        return
 
     async def post_cycle_summary(
         self,
@@ -143,14 +276,10 @@ class TradingBot(commands.Bot):
         daily_pnl: float,
         drawdown_status: dict | None = None,
     ):
-        """Post end-of-cycle summary with drawdown tracking."""
+        """Post cycle summary — only posts on drawdown warnings now."""
         if not self._signal_channel:
             return
-        embed = cycle_summary_embed(
-            cycle, predictions, positions, account_equity, daily_pnl, drawdown_status
-        )
-        # Alert if cushion is dangerously low (<20%)
-        content = None
+        # Only post if cushion is dangerously low (<20%)
         if drawdown_status and drawdown_status["at_risk"]:
             mention = f"<@&{self.alert_role_id}>" if self.alert_role_id else "@here"
             content = (
@@ -159,7 +288,10 @@ class TradingBot(commands.Bot):
                 f"({drawdown_status['cushion_pct']:.0f}%) "
                 f"Floor: ${drawdown_status['drawdown_floor']:,.2f}"
             )
-        await self._signal_channel.send(content=content, embed=embed)
+            embed = cycle_summary_embed(
+                cycle, predictions, positions, account_equity, daily_pnl, drawdown_status
+            )
+            await self._signal_channel.send(content=content, embed=embed)
 
 
 # ── Global bot instance (set by run_bot) ──────────────────────────
@@ -411,6 +543,37 @@ async def close_cmd(interaction: discord.Interaction, symbol: str):
         await interaction.followup.send(f"Close failed: {e}")
 
 
+@app_commands.command(name="poly_scalper", description="Crypto scalper status — 5-min binary markets")
+async def poly_scalper_cmd(interaction: discord.Interaction):
+    bot = get_bot()
+    poly_orch = _get_poly_orch(bot)
+    if not poly_orch:
+        await interaction.response.send_message("Polymarket not connected.", ephemeral=True)
+        return
+
+    status = poly_orch.scalper.get_status()
+    lines = [
+        "**Crypto Scalper Status**",
+        f"Assets: {', '.join(a.upper() for a in status['enabled_assets'])}  |  "
+        f"Threshold: {status['threshold']:.0%}  |  "
+        f"Shares/trade: {status['shares_per_trade']}",
+        f"Trades today: {status['trades_today']}  |  P&L today: ${status['pnl_today']:+.2f}",
+    ]
+
+    windows = status.get("active_windows", {})
+    if windows:
+        lines.append("\n**Active Windows:**")
+        for asset, w in windows.items():
+            lines.append(
+                f"> **{asset.upper()}**  Up={w['up']:.2f} Down={w['down']:.2f}  "
+                f"{w['seconds_left']}s left  {'(traded)' if w['traded'] else ''}"
+            )
+    else:
+        lines.append("No active windows.")
+
+    await interaction.response.send_message("\n".join(lines))
+
+
 @app_commands.command(name="closeall", description="Close ALL open positions immediately")
 async def closeall_cmd(interaction: discord.Interaction):
     bot = get_bot()
@@ -592,3 +755,527 @@ async def stale_cmd(interaction: discord.Interaction):
 
     embed.set_footer(text="LaT-PFN Trading System")
     await interaction.response.send_message(embed=embed)
+
+
+@app_commands.command(name="sniper", description="Sniper Mode — scan top pairs and enter positions aggressively")
+async def sniper_cmd(interaction: discord.Interaction):
+    bot = get_bot()
+    if not bot or not bot._trading_system:
+        await interaction.response.send_message("Trading system not connected.", ephemeral=True)
+        return
+
+    ts = bot._trading_system
+
+    if not ts.is_hyperliquid:
+        await interaction.response.send_message(
+            "Sniper mode is only available in Hyperliquid mode.", ephemeral=True
+        )
+        return
+
+    if not ts.executor:
+        await interaction.response.send_message(
+            "No executor connected (dry_run mode). Sniper requires live execution.", ephemeral=True
+        )
+        return
+
+    await interaction.response.defer(thinking=True)
+
+    try:
+        from signals.sniper import scan_sniper_candidates, SNIPER_MAX_POSITIONS
+
+        # Check how many sniper slots are available
+        open_count = ts.order_mgr.open_count
+        max_pos = ts.config["risk"].get("max_concurrent_positions", 6)
+        available = min(SNIPER_MAX_POSITIONS, max_pos - open_count)
+
+        if available <= 0:
+            await interaction.followup.send(
+                f"No position slots available ({open_count}/{max_pos} open). "
+                f"Close a position first with /close or /closeall."
+            )
+            return
+
+        # Fetch current balance
+        balance = await ts.executor.get_cash_balance()
+        if balance <= 0:
+            balance = ts.account_equity
+
+        # Scan for candidates
+        candidates = await scan_sniper_candidates(ts)
+
+        if not candidates:
+            await interaction.followup.send(
+                "No sniper candidates found. All pairs below minimum confidence (15%) "
+                "or already have open positions."
+            )
+            return
+
+        # Show the plan embed
+        embed = sniper_plan_embed(candidates, balance)
+        msg = await interaction.followup.send(embed=embed, wait=True)
+
+        # Add reaction buttons
+        await msg.add_reaction("\u2705")  # checkmark
+        await msg.add_reaction("\u274C")  # X
+
+        # Wait for user reaction (15s timeout)
+        def check(reaction, user):
+            return (
+                user == interaction.user
+                and str(reaction.emoji) in ("\u2705", "\u274C")
+                and reaction.message.id == msg.id
+            )
+
+        try:
+            reaction, user = await bot.wait_for("reaction_add", timeout=15.0, check=check)
+        except asyncio.TimeoutError:
+            await msg.edit(
+                embed=discord.Embed(
+                    title="\U0001F3AF Sniper Mode \u2014 Timed Out",
+                    description="No response in 15 seconds. Sniper cancelled.",
+                    color=0x808080,
+                    timestamp=datetime.now(timezone.utc),
+                )
+            )
+            return
+
+        if str(reaction.emoji) == "\u274C":
+            await msg.edit(
+                embed=discord.Embed(
+                    title="\U0001F3AF Sniper Mode \u2014 Cancelled",
+                    description="User cancelled sniper execution.",
+                    color=0x808080,
+                    timestamp=datetime.now(timezone.utc),
+                )
+            )
+            return
+
+        # Execute top N candidates
+        to_execute = candidates[:available]
+        results = []
+
+        for candidate in to_execute:
+            try:
+                order_result = await ts.executor.place_bracket_order(
+                    symbol=candidate.instrument,
+                    direction=candidate.direction,
+                    quantity=candidate.position_size,
+                    entry_price=candidate.entry_price,
+                    stop_price=candidate.stop_loss,
+                    target_price=candidate.take_profit,
+                )
+
+                if order_result and "orderId" in order_result:
+                    # Track position locally
+                    from execution.order_manager import Position
+                    ts.order_mgr.add_position(Position(
+                        instrument=candidate.instrument,
+                        direction=candidate.direction,
+                        size=candidate.position_size,
+                        entry_price=candidate.entry_price,
+                        stop_loss=candidate.stop_loss,
+                        take_profit=candidate.take_profit,
+                        order_id=order_result.get("orderId"),
+                    ))
+
+                results.append({
+                    "candidate": candidate,
+                    "order_result": order_result,
+                })
+            except Exception as e:
+                logger.error("Sniper execution failed for %s: %s", candidate.instrument, e)
+                results.append({
+                    "candidate": candidate,
+                    "order_result": None,
+                    "error": str(e),
+                })
+
+        # Refresh balance after execution
+        try:
+            new_balance = await ts.executor.get_cash_balance()
+            if new_balance > 0:
+                ts.account_equity = new_balance
+                balance = new_balance
+        except Exception:
+            pass
+
+        # Post result embed
+        result_embed = sniper_result_embed(results, balance)
+        await msg.edit(embed=result_embed)
+
+    except Exception as e:
+        logger.error("Sniper command error: %s", e, exc_info=True)
+        await interaction.followup.send(f"Sniper failed: {e}")
+
+
+@app_commands.command(
+    name="go",
+    description="HOT ENTRY — scan all pairs and immediately execute best signals",
+)
+@app_commands.describe(
+    max_trades="Max trades to execute (default 2)",
+)
+async def go_cmd(interaction: discord.Interaction, max_trades: int = 2):
+    """
+    Immediate market entry based on current momentum and directional trend.
+
+    Runs the full microstructure pipeline (model + orderbook + sentiment +
+    regime + calibration + trend filter) on all instruments, ranks the
+    results, and IMMEDIATELY EXECUTES the top signals. No confirmation
+    needed — this is the hot button.
+    """
+    bot = get_bot()
+    if not bot or not bot._trading_system:
+        await interaction.response.send_message(
+            "Trading system not connected.", ephemeral=True
+        )
+        return
+
+    ts = bot._trading_system
+
+    if not ts.is_hyperliquid:
+        await interaction.response.send_message(
+            "/go is only available in Hyperliquid mode.", ephemeral=True
+        )
+        return
+
+    if not ts.executor:
+        await interaction.response.send_message(
+            "No executor connected (dry_run mode). /go requires live execution.",
+            ephemeral=True,
+        )
+        return
+
+    max_trades = max(1, min(max_trades, 4))  # clamp to 1-4
+
+    # Check available slots
+    max_pos = ts.config["risk"].get("max_concurrent_positions", 6)
+    available = max_pos - ts.order_mgr.open_count
+    if available <= 0:
+        await interaction.response.send_message(
+            f"No position slots available ({ts.order_mgr.open_count}/{max_pos} open). "
+            f"Close a position first with /close or /closeall.",
+            ephemeral=True,
+        )
+        return
+
+    # Defer — this takes 15-30s to scan all pairs
+    await interaction.response.defer(thinking=True)
+
+    try:
+        # Run the full scan + execute pipeline
+        result = await ts.force_scan_and_execute(max_trades=max_trades)
+
+        # Build and send the result embed
+        embed = go_result_embed(result)
+
+        # If we executed trades, @mention for notification
+        content = None
+        if result["executed"]:
+            mention = (
+                f"<@&{bot.alert_role_id}>" if bot.alert_role_id else "@here"
+            )
+            n = len(result["executed"])
+            coins = ", ".join(e["instrument"] for e in result["executed"])
+            content = f"{mention} **HOT ENTRY** — {n} trade{'s' if n > 1 else ''} executed: {coins}"
+
+        await interaction.followup.send(content=content, embed=embed)
+
+    except Exception as e:
+        logger.error("GO command error: %s", e, exc_info=True)
+        await interaction.followup.send(f"/go failed: {e}")
+
+
+# ── Polymarket commands ──────────────────────────────────────────────
+
+def _get_poly_orch(bot):
+    """Get the Polymarket orchestrator, or None if not available/connected."""
+    if not bot:
+        return None
+    orch = getattr(bot, "_polymarket_orchestrator", None)
+    if not orch:
+        return None
+    # Check that the CLOB client is connected (Bug 9 fix)
+    if not orch.client._client:
+        return None
+    return orch
+
+
+@app_commands.command(name="poly_scan", description="Scan Polymarket for snipe + divergence candidates")
+async def poly_scan_cmd(interaction: discord.Interaction):
+    bot = get_bot()
+    poly_orch = _get_poly_orch(bot)
+    if not poly_orch:
+        await interaction.response.send_message(
+            "Polymarket not connected. Wait for it to initialize or check credentials.",
+            ephemeral=True,
+        )
+        return
+
+    await interaction.response.defer(thinking=True)
+    try:
+        result = await poly_orch.force_scan()
+
+        lines = [f"**Polymarket Scan** (cycle #{result.get('cycle', '?')})"]
+        lines.append(f"Markets scanned: {result.get('markets_scanned', 0)}")
+        lines.append("")
+
+        snipes = result.get("snipe_candidates", [])
+        if snipes:
+            lines.append(f"**Resolution Snipe Candidates ({len(snipes)})**")
+            for s in snipes[:5]:
+                lines.append(
+                    f"> YES=${s['yes_price']:.2f}  edge={s['edge_pct']:.1f}%  "
+                    f"hrs={s['hours_to_resolution']:.0f}  `{s['question'][:55]}`"
+                )
+        else:
+            lines.append("No snipe candidates found.")
+
+        divs = result.get("divergence_candidates", [])
+        if divs:
+            lines.append(f"\n**LLM Divergence Candidates ({len(divs)})**")
+            for d in divs[:5]:
+                lines.append(
+                    f"> {d['direction']} LLM={d['llm_probability']:.2f} vs "
+                    f"mkt={d['market_yes_price']:.2f}  "
+                    f"div={d['divergence']:+.2f}  `{d['question'][:50]}`"
+                )
+        else:
+            lines.append("\nNo divergence candidates found.")
+
+        executed = result.get("executed", [])
+        if executed:
+            lines.append(f"\n**Executed: {len(executed)} trades**")
+            for t in executed:
+                lines.append(
+                    f"> {t.get('direction', '?')} `{t.get('question', '?')[:45]}`  "
+                    f"${t.get('size_usdc', 0):.2f}"
+                )
+
+        await interaction.followup.send("\n".join(lines))
+    except Exception as e:
+        logger.error("poly_scan error: %s", e, exc_info=True)
+        await interaction.followup.send(f"Scan failed: {e}")
+
+
+@app_commands.command(name="poly_go", description="Execute best Polymarket candidates now")
+async def poly_go_cmd(interaction: discord.Interaction):
+    bot = get_bot()
+    poly_orch = _get_poly_orch(bot)
+    if not poly_orch:
+        await interaction.response.send_message(
+            "Polymarket not connected. Wait for it to initialize or check credentials.",
+            ephemeral=True,
+        )
+        return
+
+    await interaction.response.defer(thinking=True)
+    try:
+        result = await poly_orch.force_execute()
+
+        executed = result.get("executed", [])
+        if executed:
+            lines = [f"**Polymarket /go — {len(executed)} trades executed**"]
+            for t in executed:
+                lines.append(
+                    f"> {t.get('direction', '?')} @ ${t.get('entry_price', 0):.4f}  "
+                    f"${t.get('size_usdc', 0):.2f}  `{t.get('question', '')[:50]}`"
+                )
+            await interaction.followup.send("\n".join(lines))
+        else:
+            errors = result.get("errors", [])
+            blocked = result.get("blocked_reason", "")
+            msg = "No trades executed."
+            if blocked:
+                msg += f"\nBlocked: {blocked}"
+            if errors:
+                msg += f"\nErrors: {'; '.join(str(e) for e in errors)}"
+            await interaction.followup.send(msg)
+    except Exception as e:
+        logger.error("poly_go error: %s", e, exc_info=True)
+        await interaction.followup.send(f"/poly_go failed: {e}")
+
+
+@app_commands.command(name="poly_positions", description="Show open Polymarket positions")
+async def poly_positions_cmd(interaction: discord.Interaction):
+    bot = get_bot()
+    poly_orch = _get_poly_orch(bot)
+    if not poly_orch:
+        await interaction.response.send_message("Polymarket not connected.", ephemeral=True)
+        return
+
+    positions = poly_orch.positions.get_open_positions()
+    if not positions:
+        await interaction.response.send_message("No open Polymarket positions.", ephemeral=True)
+        return
+
+    lines = [f"**Polymarket Positions ({len(positions)} open)**"]
+    for key, pos in positions.items():
+        lines.append(
+            f"> [{pos.strategy}] **{pos.direction}** @ ${pos.entry_price:.4f}  "
+            f"${pos.size_usdc:.2f} ({pos.shares:.1f} shares)\n"
+            f">   `{pos.question[:55]}`"
+        )
+
+    deployed = poly_orch.positions.total_deployed()
+    realized = poly_orch.positions.total_realized_pnl()
+    lines.append(f"\nDeployed: ${deployed:.2f}  |  Realized P&L: ${realized:+.2f}")
+
+    await interaction.response.send_message("\n".join(lines))
+
+
+@app_commands.command(name="poly_status", description="Polymarket bot status and risk summary")
+async def poly_status_cmd(interaction: discord.Interaction):
+    bot = get_bot()
+    poly_orch = _get_poly_orch(bot)
+    if not poly_orch:
+        await interaction.response.send_message("Polymarket not connected.", ephemeral=True)
+        return
+
+    status = poly_orch.get_status()
+    lines = [
+        "**Polymarket Status**",
+        f"Running: {'Yes' if status['running'] else 'No'}  |  Cycle: {status['cycle']}  |  Last scan: {status['last_scan_age']}",
+        f"Budget: ${status['budget']:.2f}  |  Deployed: ${status['deployed']:.2f}  |  Available: ${status['available']:.2f}",
+        f"Exposure: {status['exposure_pct']:.0f}%  |  Positions: {status['open_positions']}/{status['max_positions']}",
+        f"Daily P&L: ${status['daily_pnl']:+.2f}  |  Total Realized: ${status['total_realized_pnl']:+.2f}",
+    ]
+
+    fc = status.get("forecast_stats", {})
+    if fc:
+        brier = fc.get("brier_score")
+        lines.append(
+            f"Forecasts: {fc.get('total_forecasts', 0)} total, "
+            f"{fc.get('resolved', 0)} resolved"
+            + (f"  |  Brier: {brier:.4f}" if brier is not None else "")
+        )
+
+    await interaction.response.send_message("\n".join(lines))
+
+
+@app_commands.command(name="poly_close", description="Close a Polymarket position by market ID prefix")
+@app_commands.describe(market_prefix="First few characters of the market ID or question")
+async def poly_close_cmd(interaction: discord.Interaction, market_prefix: str):
+    bot = get_bot()
+    poly_orch = _get_poly_orch(bot)
+    if not poly_orch:
+        await interaction.response.send_message("Polymarket not connected.", ephemeral=True)
+        return
+
+    await interaction.response.defer(thinking=True)
+
+    # Find matching position
+    open_pos = poly_orch.positions.get_open_positions()
+    match_key = None
+    for key, pos in open_pos.items():
+        if (market_prefix.lower() in pos.market_id.lower() or
+            market_prefix.lower() in pos.question.lower()):
+            match_key = key
+            break
+
+    if not match_key:
+        await interaction.followup.send(f"No open position matching '{market_prefix}'")
+        return
+
+    pos = poly_orch.positions.positions[match_key]
+    try:
+        mid = poly_orch.client.get_midpoint(pos.token_id)
+        if mid <= 0:
+            mid = pos.entry_price
+
+        result = poly_orch.client.sell_market(pos.token_id, pos.shares)
+        realized_pnl = (mid - pos.entry_price) * pos.shares
+        poly_orch.positions.close_position(match_key, mid, realized_pnl)
+        poly_orch.risk.record_pnl(realized_pnl)
+
+        await interaction.followup.send(
+            f"Closed: **{pos.direction}** `{pos.question[:50]}`\n"
+            f"Entry: ${pos.entry_price:.4f} → Exit: ${mid:.4f}  |  "
+            f"P&L: ${realized_pnl:+.4f}"
+        )
+    except Exception as e:
+        await interaction.followup.send(f"Close failed: {e}")
+
+
+@app_commands.command(name="poly_mc_status", description="Max Concurrent strategy status")
+async def poly_mc_status_cmd(interaction: discord.Interaction):
+    bot = get_bot()
+    poly_orch = _get_poly_orch(bot)
+    if not poly_orch:
+        await interaction.response.send_message("Polymarket not connected.", ephemeral=True)
+        return
+
+    mc = poly_orch.max_concurrent_strategy
+    mc_positions = poly_orch.positions.get_positions_by_strategy("max_concurrent")
+
+    mc_deployed = sum(p.size_usdc for p in mc_positions.values())
+    mc_pnl = sum(
+        p.realized_pnl for p in poly_orch.positions.positions.values()
+        if p.strategy == "max_concurrent" and p.status in ("closed", "resolved")
+    )
+
+    lines = [
+        "**Max Concurrent Strategy**",
+        f"Positions: {len(mc_positions)}/{mc.max_positions}  |  Budget: ${mc.budget:.2f}",
+        f"Deployed: ${mc_deployed:.2f}  |  Realized P&L: ${mc_pnl:+.2f}",
+        f"Settings: ${mc.bet_size}/bet  |  {mc.min_divergence:.0%} min div  |  {mc.exit_hours}h exit",
+    ]
+
+    # Top 5 open positions by divergence
+    if mc_positions:
+        sorted_pos = sorted(
+            mc_positions.items(),
+            key=lambda kv: abs(kv[1].llm_probability - kv[1].market_probability),
+            reverse=True,
+        )[:5]
+        lines.append("\n**Top positions:**")
+        for key, pos in sorted_pos:
+            div = pos.llm_probability - pos.market_probability
+            lines.append(
+                f"  {pos.direction} `{pos.question[:45]}` @ {pos.entry_price:.2f} "
+                f"(div {div:+.2f})"
+            )
+
+    await interaction.response.send_message("\n".join(lines))
+
+
+@app_commands.command(name="poly_turbo", description="Turbo LLM strategy status")
+async def poly_turbo_cmd(interaction: discord.Interaction):
+    bot = get_bot()
+    poly_orch = _get_poly_orch(bot)
+    if not poly_orch:
+        await interaction.response.send_message("Polymarket not connected.", ephemeral=True)
+        return
+
+    ts = poly_orch.turbo.get_status()
+    turbo_positions = poly_orch.positions.get_positions_by_strategy("turbo")
+
+    turbo_pnl = sum(
+        p.realized_pnl for p in poly_orch.positions.positions.values()
+        if p.strategy == "turbo" and p.status in ("closed", "resolved")
+    )
+
+    lines = [
+        f"**Turbo LLM Strategy** {'ON' if ts['running'] else 'OFF'}",
+        f"Cycle: {ts['cycle']}  |  Positions: {ts['positions']}/{ts['max_positions']}",
+        f"Deployed: ${ts['deployed']}  |  Session P&L: ${ts['session_pnl']:+.4f}",
+        f"Total Realized P&L: ${turbo_pnl:+.2f}",
+        f"Trades: {ts['session_trades']}  |  Exits: {ts['session_exits']}",
+        f"Settings: ${ts['bet_size']}/bet  |  {ts['exit_minutes']}min exit  |  {ts['cycle_seconds']}s cycle",
+    ]
+
+    if turbo_positions:
+        sorted_pos = sorted(
+            turbo_positions.items(),
+            key=lambda kv: abs(kv[1].llm_probability - kv[1].market_probability),
+            reverse=True,
+        )[:5]
+        lines.append("\n**Top positions:**")
+        for key, pos in sorted_pos:
+            div = pos.llm_probability - pos.market_probability
+            lines.append(
+                f"  {pos.direction} `{pos.question[:45]}` @ {pos.entry_price:.2f} "
+                f"(div {div:+.2f})"
+            )
+
+    await interaction.response.send_message("\n".join(lines))

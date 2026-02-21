@@ -127,6 +127,79 @@ def check_exposure_limit(
     )
 
 
+# ── Crypto correlation clusters ─────────────────────────────────
+# Coins within the same cluster are highly correlated (>0.85) and should
+# be treated as a single position for risk purposes.
+CRYPTO_CORRELATION_CLUSTERS = {
+    "majors": {"BTC", "ETH"},
+    "l1_alt": {"SOL", "AVAX", "SUI", "APT", "SEI", "TIA"},
+    "l2": {"ARB", "OP", "STRK", "MANTA", "BLAST"},
+    "meme": {"DOGE", "SHIB", "PEPE", "WIF", "BONK", "FLOKI"},
+    "defi": {"AAVE", "UNI", "MKR", "CRV", "PENDLE", "JUP"},
+    "ai": {"FET", "RNDR", "TAO", "NEAR", "AR"},
+}
+
+# Max same-direction positions per correlation cluster
+MAX_PER_CLUSTER = 2
+
+
+def _get_cluster(coin: str) -> str | None:
+    """Find which correlation cluster a coin belongs to."""
+    for cluster_name, coins in CRYPTO_CORRELATION_CLUSTERS.items():
+        if coin in coins:
+            return cluster_name
+    return None
+
+
+def check_correlation_limit(
+    open_positions: dict,
+    new_instrument: str,
+    new_direction: str,
+    max_per_cluster: int = MAX_PER_CLUSTER,
+) -> tuple[bool, str]:
+    """
+    Check if adding a new crypto position would create excessive correlation risk.
+
+    Coins in the same cluster (e.g. BTC and ETH in "majors") are highly correlated.
+    If we already hold max_per_cluster same-direction positions in a cluster,
+    block the new entry.
+
+    Args:
+        open_positions:   Dict of instrument → Position objects.
+        new_instrument:   Proposed new coin (e.g. 'SOL').
+        new_direction:    'long' or 'short'.
+        max_per_cluster:  Max same-direction positions per cluster (default 2).
+
+    Returns:
+        (allowed, reason_string)
+    """
+    new_cluster = _get_cluster(new_instrument)
+    if new_cluster is None:
+        # Coin not in any cluster — no correlation limit
+        return True, f"{new_instrument} not in any correlation cluster"
+
+    # Count same-direction positions in the same cluster
+    same_dir_count = 0
+    same_dir_coins = []
+    for inst, pos in open_positions.items():
+        if _get_cluster(inst) == new_cluster and pos.direction == new_direction:
+            same_dir_count += 1
+            same_dir_coins.append(inst)
+
+    if same_dir_count >= max_per_cluster:
+        return False, (
+            f"Correlation limit: {new_instrument} is in the '{new_cluster}' cluster "
+            f"with {same_dir_coins}. Already {same_dir_count} {new_direction} "
+            f"positions in this cluster (max {max_per_cluster}). "
+            f"Adding another correlated {new_direction} increases concentration risk."
+        )
+
+    return True, (
+        f"Correlation OK: {new_instrument} [{new_cluster}] — "
+        f"{same_dir_count}/{max_per_cluster} same-direction in cluster"
+    )
+
+
 def select_best_signals(
     signals: dict,
     open_positions: dict,

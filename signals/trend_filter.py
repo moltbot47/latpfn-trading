@@ -54,23 +54,32 @@ def compute_trend_bias(
 
 
 def check_trend_alignment(
-    direction: str, trend_bias: dict
+    direction: str, trend_bias: dict, mode: str = "gate"
 ) -> Tuple[bool, str]:
     """Check if signal direction aligns with EMA trend.
 
     Args:
         direction: 'long' or 'short'.
         trend_bias: Output from compute_trend_bias().
+        mode: 'gate' = hard block counter-trend, 'soft' = allow with penalty flag.
 
     Returns:
         (allowed, reason) — allowed=True if trade is permitted.
+        In soft mode, counter-trend signals are allowed but reason includes
+        'SOFT_PENALTY' marker for the caller to apply a confidence multiplier.
     """
     bias = trend_bias["bias"]
 
     if bias == "bearish" and direction == "long":
+        detail = f"long vs bearish EMA (price {trend_bias['price_vs_fast']:+.2f}% vs fast, {trend_bias['price_vs_slow']:+.2f}% vs slow)"
+        if mode == "soft":
+            return True, f"SOFT_PENALTY: {detail}"
         return False, f"long blocked by bearish EMA (price {trend_bias['price_vs_fast']:+.2f}% vs fast, {trend_bias['price_vs_slow']:+.2f}% vs slow)"
 
     if bias == "bullish" and direction == "short":
+        detail = f"short vs bullish EMA (price {trend_bias['price_vs_fast']:+.2f}% vs fast, {trend_bias['price_vs_slow']:+.2f}% vs slow)"
+        if mode == "soft":
+            return True, f"SOFT_PENALTY: {detail}"
         return False, f"short blocked by bullish EMA (price {trend_bias['price_vs_fast']:+.2f}% vs fast, {trend_bias['price_vs_slow']:+.2f}% vs slow)"
 
     return True, f"aligned with {bias} trend"
