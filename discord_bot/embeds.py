@@ -87,6 +87,17 @@ def signal_embed(
         inline=True,
     )
 
+    # Estimated hold time
+    est = getattr(signal, "est_hold_minutes", 0)
+    if est > 0:
+        est_fast = est * 0.5
+        est_slow = est * 2.0
+        embed.add_field(
+            name="\u23F1 Est. Hold Time",
+            value=_format_hold_range(est_fast, est, est_slow),
+            inline=True,
+        )
+
     # Strategy psychology for this tier
     explainer = get_tier_explainer(signal.shot_type)
     if explainer:
@@ -111,7 +122,7 @@ def execution_embed(
     if result and "orderId" in result:
         embed = discord.Embed(
             title=f"Order Placed: {instrument}",
-            description=f"{signal.direction.upper()} {signal.position_size} contracts via PickMyTrade",
+            description=f"{signal.direction.upper()} {signal.position_size} contracts via TradersPost",
             color=0x00CC00,
             timestamp=datetime.now(timezone.utc),
         )
@@ -153,6 +164,17 @@ def execution_embed(
             inline=True,
         )
         embed.add_field(name="R:R", value=f"{rr:.1f}:1", inline=True)
+
+        # Estimated hold time
+        est = getattr(signal, "est_hold_minutes", 0)
+        if est > 0:
+            est_fast = est * 0.5
+            est_slow = est * 2.0
+            embed.add_field(
+                name="\u23F1 Est. Hold Time",
+                value=_format_hold_range(est_fast, est, est_slow),
+                inline=True,
+            )
     else:
         embed = discord.Embed(
             title=f"Order Failed: {instrument}",
@@ -656,3 +678,26 @@ def _confidence_bar(confidence: float, width: int = 10) -> str:
     filled = int(confidence * width)
     empty = width - filled
     return f"[{'#' * filled}{'-' * empty}]"
+
+
+def _format_hold_range(fast_min: float, median_min: float, slow_min: float) -> str:
+    """Format an estimated hold time range for Discord display.
+
+    Args:
+        fast_min: Optimistic estimate (minutes).
+        median_min: Median estimate (minutes).
+        slow_min: Conservative estimate (minutes).
+
+    Returns:
+        Human-readable range like "~30m-4h (median ~2h)"
+    """
+    def _fmt(minutes: float) -> str:
+        if minutes < 60:
+            return f"{max(1, int(minutes))}m"
+        hours = minutes / 60
+        if hours < 24:
+            return f"{hours:.1f}h" if hours % 1 else f"{int(hours)}h"
+        days = hours / 24
+        return f"{days:.1f}d"
+
+    return f"**{_fmt(fast_min)} – {_fmt(slow_min)}**\nmedian ~{_fmt(median_min)}"

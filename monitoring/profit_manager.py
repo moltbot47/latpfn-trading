@@ -11,7 +11,7 @@ ES=F, etc.) is delayed ~10-15 minutes. Actions recommended here are based
 on DELAYED prices — the actual market price may be significantly different,
 especially during fast-moving sessions.
 
-Always cross-reference with live broker data (PickMyTrade dashboard,
+Always cross-reference with live broker data (TradersPost dashboard,
 Tradovate) before acting on recommendations from this module.
 
 Profit-taking thresholds:

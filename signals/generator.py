@@ -31,6 +31,7 @@ class TradingSignal:
     size_multiplier: float = 1.0    # from shot tier config (risk manager uses this)
     regime_size_mult: float = 1.0   # from market-based regime detection (sizing adjustment)
     max_hold_minutes: int = 0       # 0 = no limit (standard), >0 = scalp auto-close
+    est_hold_minutes: float = 0.0   # estimated hold time based on target distance / volatility
     timestamp: datetime = field(default_factory=datetime.now)
 
 
@@ -161,6 +162,18 @@ class SignalGenerator:
 
         max_hold = tier_params.get("max_hold_minutes", 0) if self.strategy_mode == "scalp" else 0
 
+        # Estimate hold time: target_distance / volatility_per_bar * bar_interval
+        bar_interval = self.config.get("schedule", {}).get("prediction_interval_minutes", 5)
+        uncertainty = prediction["uncertainty"]
+        near_unc = float(np.mean(uncertainty[:10])) if len(uncertainty) >= 10 else float(np.mean(uncertainty))
+        target_distance = abs(take_profit - entry_price)
+        if near_unc > 0:
+            est_bars = target_distance / near_unc
+            est_hold = est_bars * bar_interval
+            est_hold = min(est_hold, 7 * 24 * 60)  # cap at 1 week for display sanity
+        else:
+            est_hold = 0.0
+
         signal = TradingSignal(
             instrument=instrument,
             direction=direction,
@@ -173,6 +186,7 @@ class SignalGenerator:
             shot_type=tier_name,
             size_multiplier=size_multiplier,
             max_hold_minutes=max_hold,
+            est_hold_minutes=est_hold,
         )
 
         logger.info(

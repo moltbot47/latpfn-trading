@@ -33,9 +33,8 @@ instruments:
     contract_size: 0.50     # $0.50 per point (1/10th of YM)
     tick_size: 1.0
     tick_value: 0.50
-    # Backtest 02/12 confirmation: 26 trades, 34.6% WR, -$452, PF 0.45
-    # Both tiers losing in isolation: three_pointer (PF 0.25), half_court (PF 0.84)
-    # WARNING: MYM model has weak/inconsistent edge — monitor closely
+    # Backtest 02/12: 26 trades, 34.6% WR, -$452, PF 0.45 (weak in backtest)
+    # LIVE 02/19-02/23: 48 trades, 50.0% WR, +$256, PF 1.54 (profitable live)
     allowed_tiers: [dunk, alley_oop, layup, short_range, free_throw, three_pointer, half_court]
     context_assets:
       - "SPY"    # S&P 500 ETF
@@ -55,9 +54,8 @@ instruments:
     tick_size: 0.25
     tick_value: 0.50
     # Backtest 02/12: 41 trades, PF 1.56, +$1538
-    # Winners: layup, short_range, free_throw, three_pointer
-    # half_court confirmed 0% WR, -$1087 in confirmation run — removed
-    # PF backtest: free_throw PF 0.20 (standard), 0.25 (scalp) — removed
+    # LIVE 02/19-02/23: 72 trades, 61.1% WR, +$1,668, PF 1.53 (confirmed edge)
+    # Top earner — consistent across backtest and live
     allowed_tiers: [dunk, alley_oop, layup, short_range, three_pointer]
     context_assets:
       - "QQQ"    # Nasdaq ETF
@@ -77,8 +75,7 @@ instruments:
     tick_size: 0.25
     tick_value: 1.25
     # Backtest 02/12: 37 trades, 43.2% WR, +$383, PF 1.27
-    # Winners: short_range (PF 3.22), layup (PF 1.21), three_pointer (PF 1.07)
-    # free_throw confirmed PF 0.62, -$86 in confirmation run — removed
+    # LIVE 02/19-02/23: 56 trades, 51.8% WR, +$404, PF 1.29 (confirmed edge)
     allowed_tiers: [dunk, alley_oop, layup, short_range, three_pointer]
     context_assets:
       - "SPY"    # S&P 500 ETF
@@ -130,7 +127,7 @@ instruments:
 
   # ── DIVERSIFICATION — CRYPTO & BONDS ───────────────────────
   # Uncorrelated asset classes for portfolio diversification.
-  # Remember to add new symbol mappings in PickMyTrade dashboard.
+  # Remember to add new symbol mappings in TradersPost dashboard.
 
   MBT:
     name: "Micro Bitcoin Futures"
@@ -140,7 +137,7 @@ instruments:
     tick_size: 5.0          # 5 index points per tick
     tick_value: 0.50        # $0.50 per tick
     # Backtest 02/16: 19 trades, 68.4% WR, PF 1.08
-    # layup PF 99, free_throw PF 2.55, short_range PF 0.15 (losing)
+    # LIVE 02/19-02/23: 10 trades, 80.0% WR, +$263, PF 2.14 (strong live edge)
     allowed_tiers: [dunk, alley_oop, layup, free_throw]
     context_assets:
       - "ETH-USD"     # Ether (highly correlated)

@@ -32,6 +32,72 @@ from discord_bot.embeds import (
 
 logger = logging.getLogger(__name__)
 
+# Path to broker reports DB (Tradovate Performance.csv imports)
+_BROKER_DB_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), "data", "broker_reports.db"
+)
+
+
+def _get_broker_stats() -> Optional[dict]:
+    """Read broker-confirmed performance from broker_reports.db."""
+    import sqlite3
+    from collections import defaultdict
+
+    if not os.path.exists(_BROKER_DB_PATH):
+        return None
+
+    try:
+        conn = sqlite3.connect(_BROKER_DB_PATH)
+        rows = conn.execute(
+            "SELECT instrument, pnl FROM broker_trades"
+        ).fetchall()
+        conn.close()
+
+        if not rows:
+            return None
+
+        by_inst = defaultdict(
+            lambda: {"trades": 0, "wins": 0, "pnl": 0.0, "gross_wins": 0.0, "gross_losses": 0.0}
+        )
+        total_wins = 0
+        total_gross_wins = 0.0
+        total_gross_losses = 0.0
+
+        for instrument, pnl in rows:
+            by_inst[instrument]["trades"] += 1
+            by_inst[instrument]["pnl"] += pnl
+            if pnl > 0:
+                total_wins += 1
+                by_inst[instrument]["wins"] += 1
+                by_inst[instrument]["gross_wins"] += pnl
+                total_gross_wins += pnl
+            else:
+                by_inst[instrument]["gross_losses"] += abs(pnl)
+                total_gross_losses += abs(pnl)
+
+        total_pnl = sum(d["pnl"] for d in by_inst.values())
+        pf = total_gross_wins / total_gross_losses if total_gross_losses > 0 else 0.0
+
+        # Sort by P&L descending, only show CME instruments (skip Hyperliquid)
+        cme_syms = {"MNQ", "MYM", "MES", "MBT", "NQ", "NQH"}
+        filtered = {
+            k: v for k, v in sorted(by_inst.items(), key=lambda x: x[1]["pnl"], reverse=True)
+            if k in cme_syms
+        }
+
+        return {
+            "total_trades": len(rows),
+            "total_wins": total_wins,
+            "win_rate": total_wins / len(rows) * 100 if rows else 0,
+            "total_pnl": total_pnl,
+            "profit_factor": pf,
+            "by_instrument": filtered,
+        }
+
+    except Exception as e:
+        logger.error("Failed to read broker stats: %s", e)
+        return None
+
 
 class TradingBot(commands.Bot):
     """Discord bot integrated with the LaT-PFN trading system."""
@@ -526,7 +592,7 @@ async def close_cmd(interaction: discord.Interaction, symbol: str):
             ts.order_mgr.remove_position(symbol)
             embed = discord.Embed(
                 title=f"Position Closed: {symbol}",
-                description="Close webhook sent to PickMyTrade",
+                description="Close webhook sent to TradersPost",
                 color=0x00CC00,
                 timestamp=datetime.now(timezone.utc),
             )
@@ -640,6 +706,29 @@ async def performance_cmd(interaction: discord.Interaction):
                 f"Profit Factor: {pf_display}  |  "
                 f"Expectancy: ${stats['expectancy']:+,.2f}"
             ),
+            inline=False,
+        )
+
+    # Broker-confirmed stats from Tradovate Performance CSVs
+    broker_stats = _get_broker_stats()
+    if broker_stats:
+        lines = [
+            f"**{broker_stats['total_trades']} trades  |  "
+            f"{broker_stats['win_rate']:.1f}% WR  |  "
+            f"PF {broker_stats['profit_factor']:.2f}  |  "
+            f"${broker_stats['total_pnl']:+,.2f}**",
+        ]
+        for sym, d in broker_stats["by_instrument"].items():
+            pf = d["gross_wins"] / d["gross_losses"] if d["gross_losses"] > 0 else float("inf")
+            pf_str = f"{pf:.2f}" if pf != float("inf") else "Inf"
+            wr = d["wins"] / d["trades"] * 100 if d["trades"] > 0 else 0
+            lines.append(
+                f"{sym}: {d['trades']} trades, {wr:.0f}% WR, "
+                f"PF {pf_str}, ${d['pnl']:+,.2f}"
+            )
+        embed.add_field(
+            name="\U0001F4B9 Broker-Confirmed (Tradovate)",
+            value="\n".join(lines),
             inline=False,
         )
 

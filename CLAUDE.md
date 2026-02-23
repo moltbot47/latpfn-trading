@@ -1,7 +1,7 @@
 # LaT-PFN Automated Futures Trading System
 
 ## What This Is
-Automated futures trading using LaT-PFN zero-shot time-series forecasting. Predicts price movements on micro futures (MYM, MNQ, MES, MBT, MET, 10Y) and executes via PickMyTrade webhooks to Apex prop firm accounts.
+Automated futures trading using LaT-PFN zero-shot time-series forecasting. Predicts price movements on micro futures (MYM, MNQ, MES, MBT, MET, 10Y) and executes via TradersPost webhooks to Apex prop firm accounts.
 
 ## Repo
 - **GitHub:** github.com/moltbot47/latpfn-trading
@@ -36,7 +36,7 @@ main.py → orchestrator/main_loop.py (TradingSystem)
   → signals/signal_ranker.py (multi-factor candidate ranking)
   → risk/manager.py (RiskManager - drawdown-aware sizing)
   → risk/apex_compliance.py (Apex prop firm rule enforcement)
-  → execution/webhook_client.py (PickMyTrade webhooks)
+  → execution/traderspost_client.py (TradersPost webhooks)
   → execution/order_manager.py (position tracking + persistence)
   → monitoring/trade_logger.py (SQLite trade/prediction logging)
   → discord_bot/bot.py (signal embeds, /status, /close, /closeall)
@@ -44,19 +44,29 @@ main.py → orchestrator/main_loop.py (TradingSystem)
 
 ## Config
 - **Main config:** config/settings.yaml
-- **Secrets:** .env (PICKMYTRADE_TOKEN, PICKMYTRADE_ACCOUNT_ID, DISCORD_BOT_TOKEN, TRADOVATE_*)
+- **Secrets:** .env (DISCORD_BOT_TOKEN, TRADOVATE_*)
 
 ## Active Instruments & Tier Filters
 | Symbol | Contract | Size | Allowed Tiers | Asset Class |
 |--------|----------|------|---------------|-------------|
-| MYM | Micro Dow | $0.50/pt | three_pointer, half_court | equity_index |
-| MNQ | Micro Nasdaq | $2/pt | layup, short_range, free_throw, three_pointer | equity_index |
+| MNQ | Micro Nasdaq | $2/pt | layup, short_range, three_pointer | equity_index |
+| MYM | Micro Dow | $0.50/pt | all tiers | equity_index |
 | MES | Micro S&P 500 | $5/pt | layup, short_range, three_pointer | equity_index |
 | MBT | Micro Bitcoin | $0.10/pt | layup, free_throw | crypto |
-| MET | Micro Ether | $0.10/pt | layup, short_range | crypto |
-| 10Y | Micro 10Y Note | $10/pt | layup, short_range, three_pointer | bonds |
 
-Disabled: M2K (no edge), MGC (Apex metals halt), MCL (no edge), FX micros (broken data)
+Disabled: MET (PF 0.29), 10Y (PF 0.00), M2K (no edge), MGC (Apex metals halt), MCL (no edge), FX micros (broken data)
+
+## Live Performance (Broker-Confirmed, 02/19-02/23/2026)
+**187 trades | 56.7% WR | PF 1.61 | +$3,205.25**
+
+| Symbol | Trades | Win Rate | P&L | PF | Avg Trade |
+|--------|--------|----------|-----|-----|-----------|
+| MNQ | 72 | 61.1% | +$1,668 | 1.53 | +$23.17 |
+| MES | 56 | 51.8% | +$404 | 1.29 | +$7.21 |
+| MBT | 10 | 80.0% | +$263 | 2.14 | +$26.25 |
+| MYM | 48 | 50.0% | +$256 | 1.54 | +$5.33 |
+
+**All 4 instruments profitable live.** MNQ is the top earner; MBT has highest WR and PF.
 
 ## Signal Pipeline
 1. Fetch 240 bars of 5-min OHLCV (yfinance)
@@ -68,7 +78,7 @@ Disabled: M2K (no edge), MGC (Apex metals halt), MCL (no edge), FX micros (broke
 7. **EMA trend filter**: reject counter-trend signals (longs in bearish, shorts in bullish)
 8. Signal ranking: confidence × tier × regime × diversification × ADX bonus
 9. Risk validation: drawdown-aware sizing, Apex compliance, portfolio cap
-10. Execution: PickMyTrade webhook → Tradovate → Apex
+10. Execution: TradersPost webhook → Tradovate → Apex
 
 ## EMA Trend Filter (signals/trend_filter.py)
 - Computes 50-period (fast, ~4hr) and 200-period (slow, ~16hr) EMAs on 5-min close data
@@ -102,10 +112,11 @@ Disabled: M2K (no edge), MGC (Apex metals halt), MCL (no edge), FX micros (broke
 - Channel: 1470827087085441078 (Trading Pilot)
 - Commands: /status, /status_radar, /close, /closeall
 
-## PickMyTrade
-- Webhook: `https://api.pickmytrade.trade/v2/add-trade-data-latest`
-- 200 OK does NOT mean trade placed — check PMT trade logs
-- Must create Settings entry in PMT dashboard for each symbol
+## TradersPost
+- Webhook: configured in settings.yaml (traderspost.webhook_url)
+- Auth embedded in webhook URL — no separate API key needed
+- Rate limits: 60 requests/min, 500 requests/hour
+- Docs: https://docs.traderspost.io/docs/core-concepts/signals/webhooks
 
 ## LaT-PFN Model
 - Cloned at `Lat-PFN/` subdirectory
