@@ -125,6 +125,14 @@ class HLPositionManager:
 
     async def start(self):
         """Start the position management loop (run as asyncio task)."""
+        # Connect HL client if not already connected
+        if hasattr(self._client, 'connect') and not self._client._info:
+            try:
+                await self._client.connect()
+                logger.info("HL client connected for Position Manager")
+            except Exception as e:
+                logger.error("HL client connection failed: %s — PM will retry", e)
+
         self._running = True
         logger.info(
             "HL Position Manager started — scan every %ds, "

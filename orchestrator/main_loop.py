@@ -6,7 +6,7 @@ Every ``prediction_interval_minutes`` minutes:
   2. Run LaT-PFN prediction
   3. Generate trading signals
   4. Validate through risk manager
-  5. Execute via webhook (PickMyTrade) or Tradovate API
+  5. Execute via webhook (TradersPost) or Tradovate API
   6. Update dashboard
 """
 
@@ -362,6 +362,35 @@ class TradingSystem:
                         self._profit_cap_notified_today = True
                     except Exception:
                         pass
+
+            # ── Trading pause (consistency rule / manual override) ──
+            pause_until_str = prop_cfg.get("trading_pause_until", "")
+            if pause_until_str and not skip_new_trades:
+                try:
+                    pause_dt = datetime.strptime(pause_until_str, "%Y-%m-%dT%H:%M:%S")
+                    pause_dt = pause_dt.replace(tzinfo=tz)
+                    now_et = datetime.now(tz)
+                    if now_et < pause_dt:
+                        skip_new_trades = True
+                        remaining = pause_dt - now_et
+                        hours_left = remaining.total_seconds() / 3600
+                        if self.cycle <= 1 or self.cycle % 60 == 0:
+                            logger.info(
+                                "TRADING PAUSED until %s ET (%.1fh remaining) — "
+                                "consistency rule protection",
+                                pause_until_str, hours_left,
+                            )
+                            if self.discord_bot and self.cycle <= 1:
+                                try:
+                                    await self.discord_bot._signal_channel.send(
+                                        f"\u23F8\uFE0F **TRADING PAUSED** — consistency rule protection\n"
+                                        f"Resume: {pause_until_str} ET ({hours_left:.1f}h)\n"
+                                        f"*Open positions still managed. No new trades until pause lifts.*"
+                                    )
+                                except Exception:
+                                    pass
+                except (ValueError, TypeError) as e:
+                    logger.warning("Invalid trading_pause_until format: %s (%s)", pause_until_str, e)
 
             # ── Feed gatekeeper with position manager intelligence ──
             if self.is_hyperliquid and self._position_manager:

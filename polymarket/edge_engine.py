@@ -123,7 +123,7 @@ class EdgeMetrics:
     allowed_price_range: Tuple[float, float] = (0.28, 0.42)
 
     # Optimal entry band (recalculated from data)
-    optimal_floor: float = 0.28
+    optimal_floor: float = 0.30
     optimal_ceiling: float = 0.42
 
     last_refresh: float = 0.0
@@ -243,15 +243,15 @@ class AdaptiveEdgeEngine:
             return False, f"hour_{hour_utc}_blocked_{hour_stat.win_rate:.0%}"
 
         # 6. Entry price band — two zones allowed:
-        #    Cheap zone (contrarian): 0.28-0.42 — high payoff, moderate WR
-        #    Expensive zone (market_lean): 0.55-0.85 — low payoff, high WR
-        #    Dead zone 0.42-0.55: breakeven WR too high, data shows losses
-        floor = self._metrics.optimal_floor
+        #    Momentum zone: 0.30-0.45 — high payoff when momentum confirms
+        #    Lean zone (market_lean): 0.45-0.85 — lower payoff, highest WR
+        #    Below 0.30: TOXIC (18.6% WR, -$222) — hard blocked
+        floor = max(self._metrics.optimal_floor, 0.30)  # hard floor
         ceiling = self._metrics.optimal_ceiling
-        in_cheap_zone = floor <= entry_price <= ceiling
-        in_lean_zone = 0.55 <= entry_price <= 0.85
-        if not in_cheap_zone and not in_lean_zone:
-            return False, f"price_dead_zone_{entry_price:.2f}"
+        in_momentum_zone = floor <= entry_price <= ceiling
+        in_lean_zone = 0.45 <= entry_price <= 0.85
+        if not in_momentum_zone and not in_lean_zone:
+            return False, f"price_blocked_{entry_price:.2f}"
 
         # 7. Edge decay — if edge is severely fading, require tighter entry
         if self._metrics.edge_decaying and self._metrics.edge_decay < -0.08:

@@ -65,6 +65,17 @@ class HyperliquidClient:
         self._info = Info(base_url, skip_ws=True)
         self._exchange = Exchange(account, base_url)
 
+        # Detect sub-account: if wallet-derived address differs from env address,
+        # set account_address so SDK orders target the correct account
+        derived_addr = account.address
+        if derived_addr.lower() != self._address.lower():
+            self._exchange.account_address = self._address
+            logger.info(
+                "Sub-account mode: wallet=%s...%s → account=%s...%s",
+                derived_addr[:6], derived_addr[-4:],
+                self._address[:6], self._address[-4:],
+            )
+
         # Validate connection by fetching user state
         try:
             state = self._info.user_state(self._address)
@@ -208,7 +219,9 @@ class HyperliquidClient:
         fraction = max(0.0, min(fraction, 1.0))
 
         try:
-            state = self._info.user_state(self._address)
+            state = await asyncio.to_thread(
+                self._info.user_state, self._address
+            )
             positions = state.get("assetPositions", [])
 
             pos_info = None
@@ -222,7 +235,8 @@ class HyperliquidClient:
                 logger.warning("No open position found for %s", coin)
                 return None
 
-            full_sz = abs(float(pos_info.get("szi", 0)))
+            szi = float(pos_info.get("szi", 0))
+            full_sz = abs(szi)
             if full_sz == 0:
                 return None
 
@@ -234,15 +248,27 @@ class HyperliquidClient:
                 logger.warning("Partial close size too small for %s (%.6f)", coin, close_sz)
                 return None
 
-            # Determine direction: if position is long (szi > 0), sell to close
-            szi = float(pos_info.get("szi", 0))
-            is_buy = szi < 0  # short position → buy to close
+            is_buy = szi < 0  # short → buy to close
 
-            result = self._exchange.market_open(
-                coin, is_buy, close_sz, slippage=0.05, reduce_only=True
+            # Get aggressive close price from L2 book
+            px = await self._get_close_price(coin, is_buy)
+            if px is None:
+                logger.error("Cannot get close price for %s", coin)
+                return None
+
+            # Direct IOC limit order, reduce_only
+            result = await asyncio.to_thread(
+                self._exchange.order,
+                coin, is_buy, close_sz, px,
+                {"limit": {"tif": "Ioc"}},
+                True,  # reduce_only
             )
 
-            status = result.get("status", "")
+            if result is None:
+                logger.error("Partial close order returned None for %s", coin)
+                return None
+
+            status = result.get("status", "") if isinstance(result, dict) else ""
             if status == "ok":
                 logger.info(
                     "Partial close %s: %.0f%% (%.6f of %.6f)",
@@ -270,18 +296,27 @@ class HyperliquidClient:
     async def _cancel_coin_orders(self, coin: str):
         """Cancel all open orders for a coin (used after partial close to re-set SL/TP)."""
         try:
-            open_orders = self._info.open_orders(self._address)
+            open_orders = await asyncio.to_thread(
+                self._info.open_orders, self._address
+            )
             for order in open_orders:
                 if order.get("coin") == coin:
                     try:
-                        self._exchange.cancel(coin, order["oid"])
+                        await asyncio.to_thread(
+                            self._exchange.cancel, coin, order["oid"]
+                        )
                     except Exception:
                         pass
         except Exception as e:
             logger.debug("Failed to cancel orders for %s: %s", coin, e)
 
     async def close_position(self, symbol: str) -> Optional[Dict]:
-        """Market close a single position."""
+        """
+        Market close a single position via direct IOC order.
+
+        Bypasses SDK's market_close() which returns None for sub-accounts.
+        Steps: cancel ALL orders (limit + trigger), then place reduce-only IOC.
+        """
         if not self._exchange or not self._info:
             logger.error("Hyperliquid client not connected")
             return None
@@ -289,8 +324,10 @@ class HyperliquidClient:
         coin = symbol.upper()
 
         try:
-            # Get current position for this coin
-            state = self._info.user_state(self._address)
+            # Fetch position using OUR address (not SDK's wallet.address)
+            state = await asyncio.to_thread(
+                self._info.user_state, self._address
+            )
             positions = state.get("assetPositions", [])
 
             pos_info = None
@@ -304,33 +341,120 @@ class HyperliquidClient:
                 logger.warning("No open position found for %s", coin)
                 return {"status": "no_position"}
 
-            sz = abs(float(pos_info.get("szi", 0)))
-            if sz == 0:
+            szi = float(pos_info.get("szi", 0))
+            if szi == 0:
                 logger.warning("Position size is 0 for %s", coin)
                 return {"status": "no_position"}
 
-            # Cancel any open orders for this coin first
-            open_orders = self._info.open_orders(self._address)
-            for order in open_orders:
-                if order.get("coin") == coin:
-                    try:
-                        self._exchange.cancel(coin, order["oid"])
-                    except Exception:
-                        pass
+            sz = abs(szi)
+            is_buy = szi < 0  # short → buy to close, long → sell to close
 
-            # Market close the position
-            result = self._exchange.market_close(coin, slippage=0.05)
+            # Cancel ALL orders for this coin — both limit AND trigger (SL/TP)
+            # open_orders only returns limit orders; frontend_open_orders includes triggers
+            await self._cancel_all_orders(coin)
 
-            status = result.get("status", "")
+            # Get aggressive close price from L2 book
+            px = await self._get_close_price(coin, is_buy)
+            if px is None:
+                logger.error("Cannot get close price for %s — no L2 data", coin)
+                return None
+
+            # Direct IOC limit order = market order, reduce_only
+            result = await asyncio.to_thread(
+                self._exchange.order,
+                coin, is_buy, sz, px,
+                {"limit": {"tif": "Ioc"}},
+                True,  # reduce_only
+            )
+
+            if result is None:
+                logger.error("Close order returned None for %s", coin)
+                return None
+
+            status = result.get("status", "") if isinstance(result, dict) else ""
             if status == "ok":
-                logger.info("Hyperliquid position closed: %s  size=%.6f", coin, sz)
+                # Verify actual fill in response
+                response = result.get("response", {})
+                statuses = response.get("data", {}).get("statuses", [])
+                filled = any("filled" in s for s in statuses)
+                errored = [s.get("error") for s in statuses if "error" in s]
+
+                if errored:
+                    logger.error("Close order errors for %s: %s", coin, errored)
+                    return None
+                if not filled:
+                    logger.warning("Close order accepted but NOT filled for %s "
+                                   "(IOC expired) — statuses: %s", coin, statuses)
+                    return None
+
+                logger.info("Position closed: %s  size=%.6f  dir=%s",
+                            coin, sz, "BUY" if is_buy else "SELL")
                 return {"status": "closed"}
             else:
-                logger.error("Hyperliquid close failed for %s: %s", coin, result)
+                logger.error("Close failed for %s: %s", coin, result)
                 return None
 
         except Exception as e:
-            logger.error("Hyperliquid close exception for %s: %s", coin, e)
+            logger.error("Close exception for %s: %s", coin, e)
+            return None
+
+    async def _cancel_all_orders(self, coin: str):
+        """Cancel ALL orders for a coin — limit orders AND trigger orders (SL/TP)."""
+        try:
+            # Cancel limit orders via open_orders
+            open_orders = await asyncio.to_thread(
+                self._info.open_orders, self._address
+            )
+            for order in open_orders:
+                if order.get("coin") == coin:
+                    try:
+                        await asyncio.to_thread(
+                            self._exchange.cancel, coin, order["oid"]
+                        )
+                    except Exception:
+                        pass
+
+            # Cancel trigger orders (SL/TP) via frontend_open_orders
+            # This endpoint returns both limit and trigger orders
+            try:
+                frontend_orders = await asyncio.to_thread(
+                    self._info.frontend_open_orders, self._address
+                )
+                for order in frontend_orders:
+                    if order.get("coin") == coin:
+                        oid = order.get("oid")
+                        if oid:
+                            try:
+                                await asyncio.to_thread(
+                                    self._exchange.cancel, coin, oid
+                                )
+                            except Exception:
+                                pass
+            except Exception as e:
+                logger.debug("frontend_open_orders not available: %s", e)
+        except Exception as e:
+            logger.debug("Failed to cancel orders for %s: %s", coin, e)
+
+    async def _get_close_price(
+        self, coin: str, is_buy: bool, slippage: float = 0.05
+    ) -> Optional[float]:
+        """Compute aggressive close price from L2 book with slippage."""
+        try:
+            book = await asyncio.to_thread(self._info.l2_snapshot, coin)
+            if not book or "levels" not in book or len(book["levels"]) < 2:
+                return None
+            if is_buy:
+                asks = book["levels"][1]
+                if asks:
+                    best_ask = float(asks[0]["px"])
+                    return self._round_price(best_ask * (1 + slippage), coin)
+            else:
+                bids = book["levels"][0]
+                if bids:
+                    best_bid = float(bids[0]["px"])
+                    return self._round_price(best_bid * (1 - slippage), coin)
+            return None
+        except Exception:
             return None
 
     async def flatten_position(self, account_id=None) -> Optional[Dict]:
@@ -340,7 +464,9 @@ class HyperliquidClient:
             return None
 
         try:
-            state = self._info.user_state(self._address)
+            state = await asyncio.to_thread(
+                self._info.user_state, self._address
+            )
             positions = state.get("assetPositions", [])
 
             open_coins = []

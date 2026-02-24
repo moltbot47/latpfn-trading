@@ -132,11 +132,18 @@ async def run(config_path: str = None, dry_run: bool = False):
             logger.info("Turbo strategy ↔ message bus connected")
 
         # HL Position Manager (Layer 1: active position lifecycle management)
-        if exec_mode == "hyperliquid" and system.executor:
+        # Connects to Hyperliquid API independently — runs alongside any exec_mode
+        hl_cfg = config.get("hyperliquid", {})
+        if hl_cfg.get("enabled", False):
             try:
+                from execution.hyperliquid_client import HyperliquidClient
                 from execution.hl_position_manager import HLPositionManager
+
+                # Create a SEPARATE HL client (independent of main executor)
+                hl_client = HyperliquidClient(config)
+
                 hl_position_manager = HLPositionManager(
-                    client=system.executor,
+                    client=hl_client,
                     config=config,
                     bus=bus,
                 )
@@ -147,7 +154,9 @@ async def run(config_path: str = None, dry_run: bool = False):
                     hl_position_manager._pair_scanner = system._pair_scanner
                 # Store on trading system for access from main loop
                 system._position_manager = hl_position_manager
-                logger.info("HL Position Manager created — 7 rules active")
+                # Store HL client ref on agent for intel publishing
+                hl_agent._hl_client = hl_client
+                logger.info("HL client + Position Manager created (standalone API)")
             except Exception as e:
                 logger.warning("HL Position Manager init failed: %s", e)
 

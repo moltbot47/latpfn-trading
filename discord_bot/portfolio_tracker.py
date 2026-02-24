@@ -246,9 +246,6 @@ class PortfolioTracker:
             except Exception as e:
                 logger.debug("HL data fetch error: %s", e)
 
-        # Apex account info
-        apex_equity = float(os.environ.get("ACCOUNT_EQUITY", "0"))
-
         embed = discord.Embed(
             title="Hyperliquid Portfolio",
             color=0x00BFFF,
@@ -256,7 +253,7 @@ class PortfolioTracker:
         )
         embed.add_field(
             name="Account",
-            value=f"Balance: **${hl_balance:.2f}**\nUnrealized P&L: ${hl_pnl:+.2f}\nApex Equity: ${apex_equity:,.2f}",
+            value=f"Balance: **${hl_balance:.2f}**\nUnrealized P&L: ${hl_pnl:+.2f}",
             inline=True,
         )
 

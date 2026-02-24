@@ -94,13 +94,15 @@ Disabled: MET (PF 0.29), 10Y (PF 0.00), M2K (no edge), MGC (Apex metals halt), M
 - Position sizing: drawdown-aware (scales with remaining cushion)
 
 ## Apex Prop Firm Rules
-- **Account:** APEX4406280000016 ($50k eval)
+- **Accounts:** APEX4406280000018 (Tradovate 5) + APEX4406280000019 (Tradovate 6) — fresh $50k evals
+- **Previous accounts:** APEX4406280000016 + 17 — blown 02/24 (counter-trend longs in gate=soft mode)
 - **Trailing drawdown:** $2,500 (floor trails up with new highs, locks at $50k)
 - **Daily loss limit:** $1,000 (conservative, system enforced)
 - **Profit target:** $3,000 ($53k balance)
 - **Consistency rule:** No single day > 30% of total profit
 - **Flatten EOD:** 4:55 PM ET hard flatten
 - **No new trades after:** 4:45 PM ET
+- **Trend filter:** `gate` mode (hard reject counter-trend signals) — changed from `soft` after 02/24 loss
 
 ## Dashboard
 - **URL:** http://localhost:5050
