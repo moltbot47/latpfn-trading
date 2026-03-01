@@ -1,9 +1,10 @@
-"""Tests for monitoring/logger.py — JSON formatter and setup_logging."""
+"""Tests for monitoring/logger.py — JSON formatter, setup_logging, error aggregator."""
 
 import json
 import logging
+import time
 
-from monitoring.logger import JSONFormatter
+from monitoring.logger import JSONFormatter, ErrorAggregator
 
 
 class TestJSONFormatter:
@@ -52,3 +53,50 @@ class TestJSONFormatter:
         assert "\n" not in output
         data = json.loads(output)
         assert "multi\nline\nmessage" == data["message"]
+
+
+class TestErrorAggregator:
+    def test_record_and_flush(self):
+        agg = ErrorAggregator(window_seconds=300)
+        agg.record("DB timeout")
+        agg.record("DB timeout")
+        agg.record("API failure")
+
+        assert agg.error_count == 3
+        summary = agg.flush()
+
+        assert len(summary) == 2
+        db_err = next(s for s in summary if s["message"] == "DB timeout")
+        assert db_err["count"] == 2
+
+        # Flush clears the buffer
+        assert agg.error_count == 0
+        assert agg.flush() == []
+
+    def test_old_errors_excluded(self):
+        agg = ErrorAggregator(window_seconds=60)
+        old_ts = time.time() - 120  # 2 minutes ago
+        agg.record("old error", timestamp=old_ts)
+        agg.record("recent error")
+
+        summary = agg.flush()
+        messages = [s["message"] for s in summary]
+        assert "recent error" in messages
+        assert "old error" not in messages
+
+    def test_empty_aggregator(self):
+        agg = ErrorAggregator()
+        assert agg.error_count == 0
+        assert agg.flush() == []
+
+    def test_first_and_last_seen(self):
+        agg = ErrorAggregator(window_seconds=300)
+        t1 = time.time() - 10
+        t2 = time.time()
+        agg.record("error", timestamp=t1)
+        agg.record("error", timestamp=t2)
+
+        summary = agg.flush()
+        assert len(summary) == 1
+        assert summary[0]["first_seen"] == t1
+        assert summary[0]["last_seen"] == t2
