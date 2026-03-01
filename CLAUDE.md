@@ -132,25 +132,36 @@ Disabled: MET (PF 0.29), 10Y (PF 0.00), M2K (no edge), MGC (Apex metals halt), M
 - Daily break: 5PM–6PM ET
 - Prediction cycle: every 5 minutes
 
+## Development & Operations
+```bash
+make help            # Show all available commands
+make test            # Run 240 tests
+make lint            # Ruff linter
+make coverage        # Coverage report (90% on core modules)
+make backup          # Backup all SQLite databases
+make db-maintain     # VACUUM + ANALYZE + integrity check
+make health          # Check service health
+make load-test       # Load test funding dashboard
+make docker          # Build and run in Docker
+```
+
 ## Key Operations
 ```bash
 # Clear ghost positions
 echo '[]' > data/positions.json
-
-# Send Discord message
-python3 -c "
-import os, requests
-from dotenv import load_dotenv
-load_dotenv('.env')
-token = os.getenv('DISCORD_BOT_TOKEN')
-requests.post(f'https://discord.com/api/v10/channels/1470827087085441078/messages',
-    json={'content': 'YOUR MESSAGE'},
-    headers={'Authorization': f'Bot {token}'})
-"
 
 # Run backtest for specific instrument
 python scripts/backtest.py --instrument MNQ --days 60
 
 # Analyze broker performance
 # Import Performance.csv from Tradovate → dashboard reads ~/Downloads/Performance.csv
+```
+
+## Funding Dashboard (port 5055)
+```bash
+python scripts/funding_dashboard.py   # Start dashboard
+curl localhost:5055/health            # Liveness check
+curl localhost:5055/health/detail     # Readiness + DB probe
+curl localhost:5055/metrics           # Request stats
+curl localhost:5055/api/docs          # Auto-generated API docs
 ```
