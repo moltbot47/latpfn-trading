@@ -1,4 +1,4 @@
-name: Tests
+name: CI
 
 on:
   push:
@@ -7,8 +7,21 @@ on:
     branches: [main]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Lint with ruff
+        run: |
+          pip install ruff
+          ruff check tests/ funding/ scripts/funding_dashboard.py scripts/backup.py scripts/health_monitor.py monitoring/logger.py
+
   test:
     runs-on: ubuntu-latest
+    needs: lint
 
     steps:
       - uses: actions/checkout@v4
@@ -32,11 +45,6 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Lint with ruff
-        run: |
-          pip install ruff
-          ruff check tests/ funding/ scripts/funding_dashboard.py scripts/backup.py scripts/health_monitor.py monitoring/logger.py
-
       - name: Run all tests
         run: python -m pytest tests/ -v --tb=short -x
 
@@ -54,3 +62,11 @@ jobs:
             --cov-report=term-missing \
             --cov-fail-under=70 \
             --tb=short
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t latpfn-funding:test .
