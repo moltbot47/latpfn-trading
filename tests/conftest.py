@@ -6,6 +6,95 @@ but uses test-friendly values (small numbers, predictable thresholds).
 """
 
 import pytest
+import sys
+from pathlib import Path
+
+# Ensure project root is on sys.path so `funding` and `scripts` are importable
+_ROOT = Path(__file__).parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from funding.database import FundingDB
+from funding.models import (
+    Application, CreditProfile, Inquiry, PartnerProgram,
+    Referral, ReferralClient, StrategyRound,
+)
+from funding.product_catalog import seed_catalog, seed_partner_programs
+
+
+# ── Funding Tracker Fixtures ────────────────────────────────────────
+
+
+@pytest.fixture
+def funding_db(tmp_path):
+    """Fresh FundingDB on a temp file — tables created, no seed data."""
+    return FundingDB(str(tmp_path / "test.db"))
+
+
+@pytest.fixture
+def seeded_db(funding_db):
+    """FundingDB with product catalog + partner programs seeded."""
+    seed_catalog(funding_db)
+    seed_partner_programs(funding_db)
+    return funding_db
+
+
+@pytest.fixture
+def sample_profile():
+    """CreditProfile with realistic mid-tier data (720 Experian)."""
+    return CreditProfile(
+        bureau="experian",
+        score=720,
+        total_accounts=12,
+        open_accounts=8,
+        closed_accounts=4,
+        hard_inquiries_count=3,
+        utilization_pct=22.0,
+        payment_history_pct=98.0,
+        derogatory_marks=0,
+        collections=0,
+        avg_age_years=4.5,
+        oldest_account_years=9.0,
+        total_credit_limit=50000.0,
+        total_balance=11000.0,
+        new_accounts_6mo=1,
+        revolving_balance=8000.0,
+        installment_balance=3000.0,
+    )
+
+
+@pytest.fixture
+def sample_application():
+    """Application in 'planned' status for Chase Ink Preferred."""
+    return Application(
+        product_type="credit_card",
+        lender="Chase",
+        product_name="Ink Business Preferred",
+        amount_requested=10000.0,
+        status="planned",
+        bureau_pulled="experian",
+        personal_guarantee=True,
+    )
+
+
+@pytest.fixture
+def flask_client(tmp_path):
+    """Flask test client backed by a seeded temp DB."""
+    import scripts.funding_dashboard as dashboard_mod
+
+    test_db = FundingDB(str(tmp_path / "flask_test.db"))
+    seed_catalog(test_db)
+    seed_partner_programs(test_db)
+
+    # Patch the module-level db used by all endpoints
+    original_db = dashboard_mod.db
+    dashboard_mod.db = test_db
+
+    dashboard_mod.app.config["TESTING"] = True
+    client = dashboard_mod.app.test_client()
+    yield client
+
+    dashboard_mod.db = original_db
 
 
 @pytest.fixture
