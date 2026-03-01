@@ -46,6 +46,11 @@ jobs:
             tests/test_funding_database.py \
             tests/test_funding_strategy.py \
             tests/test_funding_api.py \
-            --cov=funding \
+            tests/test_monitoring.py \
+            --cov=funding.database \
+            --cov=funding.models \
+            --cov=funding.product_catalog \
+            --cov=funding.strategy_engine \
             --cov-report=term-missing \
+            --cov-fail-under=70 \
             --tb=short
