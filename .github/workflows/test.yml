@@ -32,6 +32,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Lint with ruff
+        run: |
+          pip install ruff
+          ruff check tests/ funding/ scripts/funding_dashboard.py monitoring/logger.py
+
       - name: Run all tests
         run: python -m pytest tests/ -v --tb=short -x
 

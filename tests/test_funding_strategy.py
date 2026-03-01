@@ -1,15 +1,12 @@
 """Tests for funding.strategy_engine — readiness scoring, recommendations, round planning."""
 
-import pytest
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from funding.database import FundingDB
 from funding.models import (
     Application, CreditProfile, FundingProduct, Inquiry, StrategyRound,
 )
 from funding.strategy_engine import (
     get_readiness_score, get_recommendations, plan_round,
-    COOLING_PERIOD_DAYS, MAX_APPS_PER_ROUND,
 )
 
 

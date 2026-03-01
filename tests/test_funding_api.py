@@ -1,7 +1,6 @@
 """Tests for funding dashboard Flask API endpoints."""
 
 import json
-import pytest
 
 
 # ── Products ─────────────────────────────────────────────────────────

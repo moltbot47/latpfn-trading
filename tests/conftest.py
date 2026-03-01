@@ -16,8 +16,7 @@ if str(_ROOT) not in sys.path:
 
 from funding.database import FundingDB
 from funding.models import (
-    Application, CreditProfile, Inquiry, PartnerProgram,
-    Referral, ReferralClient, StrategyRound,
+    Application, CreditProfile,
 )
 from funding.product_catalog import seed_catalog, seed_partner_programs
 

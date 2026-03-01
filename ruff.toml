@@ -1,0 +1,13 @@
+# Ruff linter configuration
+line-length = 120
+
+[lint]
+select = ["F", "E4", "E7", "E9", "W"]
+ignore = ["E501"]  # line-too-long handled separately
+
+[lint.per-file-ignores]
+"funding/cli.py" = ["F401"]  # Rich import guarded by try/except
+"funding/pdf_parser.py" = ["F541"]  # f-string without placeholder
+"scripts/funding_dashboard.py" = ["E402"]  # sys.path.insert before imports
+"tests/conftest.py" = ["E402"]  # sys.path.insert before imports
+"tests/test_core.py" = ["E402"]  # sys.path.insert before imports

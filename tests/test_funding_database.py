@@ -1,9 +1,8 @@
 """Tests for funding.database CRUD operations, seeding, and security."""
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from funding.database import FundingDB
 from funding.models import (
     Application, CreditProfile, Inquiry, PartnerProgram,
     Referral, ReferralClient, StrategyRound,
@@ -47,15 +46,11 @@ class TestCreditProfiles:
 
     def test_save_profile_with_inquiries_rollback(self, funding_db, sample_profile):
         """If inquiry insert fails, profile should also be rolled back."""
-        from unittest.mock import patch, MagicMock
 
         inquiries = [
             Inquiry(date="2026-01-15", bureau="experian", lender="Chase"),
             Inquiry(date="2026-02-01", bureau="transunion", lender="Amex"),
         ]
-
-        # Patch save_inquiry to fail on the second call, simulating a mid-transaction error
-        original_method = funding_db.save_profile_with_inquiries
 
         call_count = 0
         original_get_conn = funding_db._get_conn

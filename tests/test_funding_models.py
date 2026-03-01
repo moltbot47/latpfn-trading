@@ -1,11 +1,10 @@
 """Tests for funding.models dataclass serialization (to_dict, from_row, etc.)."""
 
 import sqlite3
-import pytest
 
 from funding.models import (
     Application, CreditProfile, FundingProduct, Inquiry,
-    PartnerProgram, Recommendation, Referral, ReferralClient, StrategyRound,
+    PartnerProgram, Referral, StrategyRound,
 )
 
 

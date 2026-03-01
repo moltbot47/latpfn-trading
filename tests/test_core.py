@@ -15,11 +15,10 @@ No PyTorch or model loading required.
 """
 
 import json
-import math
 import os
 import time
-from datetime import date, datetime, timedelta, time as dtime
-from unittest.mock import patch, MagicMock, AsyncMock
+from datetime import date, datetime, timedelta
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -29,7 +28,7 @@ from risk.circuit_breaker import CircuitBreaker
 from signals.confidence import score_confidence
 from signals.shot_classifier import classify, nearest_tier_above
 from execution.order_manager import OrderManager, Position
-from risk.apex_compliance import ApexCompliance, FLATTEN_TIME, MARKET_REOPEN, ET
+from risk.apex_compliance import ApexCompliance, ET
 from market_data.pipeline import _YFinanceRateLimiter
 
 
@@ -957,17 +956,17 @@ class TestApexCompliance:
         # Starting: balance=50000, floor=50000-2500=47500
 
         # Balance rises to 51000 => floor = 51000 - 2500 = 48500
-        status = ac.update_balance(51000)
+        ac.update_balance(51000)
         assert ac._drawdown_floor == pytest.approx(48500)
         assert ac._highest_balance == pytest.approx(51000)
 
         # Balance drops to 50500 => floor should NOT drop (stays at 48500)
-        status = ac.update_balance(50500)
+        ac.update_balance(50500)
         assert ac._drawdown_floor == pytest.approx(48500)
         assert ac._highest_balance == pytest.approx(51000)
 
         # Balance rises again to 52000 => floor = 52000 - 2500 = 49500
-        status = ac.update_balance(52000)
+        ac.update_balance(52000)
         assert ac._drawdown_floor == pytest.approx(49500)
 
     def test_trailing_drawdown_floor_locks_at_profit_target(self, mock_config):

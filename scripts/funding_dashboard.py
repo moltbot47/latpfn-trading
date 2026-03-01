@@ -11,13 +11,12 @@ Usage:
 """
 
 import argparse
-import json
 import logging
 import os
 import platform
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, jsonify, request, Response
@@ -308,7 +307,7 @@ def api_parse_pdf():
     if not f.filename.lower().endswith(".pdf"):
         return jsonify({"error": "Must be a PDF file"}), 400
 
-    import tempfile, os
+    import tempfile
     from werkzeug.utils import secure_filename
     from funding.pdf_parser import parse_credit_report_full, analyze_credit_health
 
@@ -2755,6 +2754,6 @@ if __name__ == "__main__":
                         help="Enable Flask debug mode (NEVER use with --host 0.0.0.0)")
     args = parser.parse_args()
 
-    print(f"\n  Business Funding Tracker Dashboard")
+    print("\n  Business Funding Tracker Dashboard")
     print(f"  http://{args.host}:{args.port}\n")
     app.run(host=args.host, port=args.port, debug=args.debug)
