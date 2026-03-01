@@ -1,0 +1,46 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install CPU-only PyTorch first
+        run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run all tests
+        run: python -m pytest tests/ -v --tb=short -x
+
+      - name: Run funding tests with coverage
+        run: |
+          python -m pytest tests/test_funding_models.py \
+            tests/test_funding_database.py \
+            tests/test_funding_strategy.py \
+            tests/test_funding_api.py \
+            --cov=funding \
+            --cov-report=term-missing \
+            --tb=short
