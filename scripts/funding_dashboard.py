@@ -42,6 +42,26 @@ seed_partner_programs(db)
 _START_TIME = time.time()
 _VERSION = "1.0.0"
 
+# ── Rate Limiter ─────────────────────────────────────────────────────
+
+_rate_limit_store: dict[str, list[float]] = {}
+RATE_LIMIT_REQUESTS = 120   # max requests per window
+RATE_LIMIT_WINDOW = 60      # window in seconds
+
+
+def _check_rate_limit() -> bool:
+    """Return True if the request should be rate-limited (rejected)."""
+    key = request.remote_addr or "unknown"
+    now = time.time()
+    timestamps = _rate_limit_store.get(key, [])
+    # Prune old entries
+    cutoff = now - RATE_LIMIT_WINDOW
+    timestamps = [t for t in timestamps if t > cutoff]
+    timestamps.append(now)
+    _rate_limit_store[key] = timestamps
+    return len(timestamps) > RATE_LIMIT_REQUESTS
+
+
 # ── Metrics Collector ────────────────────────────────────────────────
 
 _metrics = {
@@ -60,6 +80,9 @@ _metrics = {
 def _before_request():
     request._start_time = time.time()
     request._request_id = uuid.uuid4().hex[:12]
+    # Rate limiting (skip health checks)
+    if not request.path.startswith("/health") and _check_rate_limit():
+        return jsonify({"error": "Rate limit exceeded"}), 429
 
 
 @app.after_request

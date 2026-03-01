@@ -220,3 +220,33 @@ class TestHealthEndpoints:
         r1 = flask_client.get("/api/products")
         r2 = flask_client.get("/api/products")
         assert r1.headers["X-Request-ID"] != r2.headers["X-Request-ID"]
+
+    def test_rate_limit_returns_429(self, flask_client, monkeypatch):
+        """Exceeding rate limit should return 429."""
+        import scripts.funding_dashboard as dash
+        # Temporarily set a very low limit
+        monkeypatch.setattr(dash, "RATE_LIMIT_REQUESTS", 2)
+        dash._rate_limit_store.clear()
+
+        flask_client.get("/api/products")
+        flask_client.get("/api/products")
+        resp = flask_client.get("/api/products")  # 3rd request exceeds limit of 2
+        assert resp.status_code == 429
+        assert "Rate limit" in resp.get_json()["error"]
+
+        # Clean up
+        dash._rate_limit_store.clear()
+
+    def test_health_bypasses_rate_limit(self, flask_client, monkeypatch):
+        """Health endpoints should not be rate limited."""
+        import scripts.funding_dashboard as dash
+        monkeypatch.setattr(dash, "RATE_LIMIT_REQUESTS", 1)
+        dash._rate_limit_store.clear()
+
+        # First request fills the limit
+        flask_client.get("/api/products")
+        # Health should still work
+        resp = flask_client.get("/health")
+        assert resp.status_code == 200
+
+        dash._rate_limit_store.clear()
