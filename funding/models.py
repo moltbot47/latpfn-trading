@@ -1,7 +1,7 @@
 """Data models for the Business Funding Tracker."""
 
 from dataclasses import dataclass, field
-from datetime import datetime, date
+from datetime import datetime
 from typing import Optional
 
 

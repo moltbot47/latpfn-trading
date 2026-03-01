@@ -871,7 +871,7 @@ def analyze_credit_health(profile: CreditProfile) -> dict:
             analysis["warnings"].append(f"Average age {a:.1f} years — thin file may limit approvals")
         else:
             rating, color = "Very New", "var(--red)"
-            analysis["warnings"].append(f"Average age under 1 year — very thin file")
+            analysis["warnings"].append("Average age under 1 year — very thin file")
 
         analysis["factors"].append({
             "name": "Account Age", "value": f"{a:.1f} yrs",
