@@ -16,6 +16,8 @@ import os
 import platform
 import sys
 import time
+import uuid
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
@@ -40,22 +42,51 @@ seed_partner_programs(db)
 _START_TIME = time.time()
 _VERSION = "1.0.0"
 
+# ── Metrics Collector ────────────────────────────────────────────────
+
+_metrics = {
+    "requests_total": 0,
+    "requests_by_method": defaultdict(int),
+    "requests_by_status": defaultdict(int),
+    "errors_total": 0,
+    "latency_sum_ms": 0.0,
+    "latency_max_ms": 0.0,
+}
+
 
 # ── Monitoring: Request Logging ──────────────────────────────────────
 
 @app.before_request
 def _before_request():
     request._start_time = time.time()
+    request._request_id = uuid.uuid4().hex[:12]
 
 
 @app.after_request
 def _after_request(response):
-    # Skip logging for health checks to reduce noise
-    if request.path.startswith("/health"):
-        return response
+    # Security headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Request-ID"] = getattr(request, "_request_id", "")
+
     duration_ms = (time.time() - getattr(request, "_start_time", time.time())) * 1000
-    logger.info("%s %s %s %.0fms", request.method, request.path,
-                response.status_code, duration_ms)
+
+    # Update metrics
+    _metrics["requests_total"] += 1
+    _metrics["requests_by_method"][request.method] += 1
+    _metrics["requests_by_status"][response.status_code] += 1
+    _metrics["latency_sum_ms"] += duration_ms
+    if duration_ms > _metrics["latency_max_ms"]:
+        _metrics["latency_max_ms"] = duration_ms
+    if response.status_code >= 500:
+        _metrics["errors_total"] += 1
+
+    # Skip logging for health checks to reduce noise
+    if not request.path.startswith("/health"):
+        logger.info("[%s] %s %s %s %.0fms",
+                    getattr(request, "_request_id", "-"),
+                    request.method, request.path,
+                    response.status_code, duration_ms)
     return response
 
 
@@ -111,6 +142,21 @@ def health_detail():
         "memory_mb": round(mem_mb, 1),
         "python_version": platform.python_version(),
         "timestamp": datetime.utcnow().isoformat() + "Z",
+    })
+
+
+@app.route("/metrics")
+def metrics():
+    total = _metrics["requests_total"]
+    avg_ms = (_metrics["latency_sum_ms"] / total) if total > 0 else 0
+    return jsonify({
+        "uptime_seconds": round(time.time() - _START_TIME),
+        "requests_total": total,
+        "requests_by_method": dict(_metrics["requests_by_method"]),
+        "requests_by_status": {str(k): v for k, v in _metrics["requests_by_status"].items()},
+        "errors_total": _metrics["errors_total"],
+        "latency_avg_ms": round(avg_ms, 1),
+        "latency_max_ms": round(_metrics["latency_max_ms"], 1),
     })
 
 

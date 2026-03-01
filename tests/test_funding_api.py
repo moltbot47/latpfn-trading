@@ -194,3 +194,29 @@ class TestHealthEndpoints:
             flask_client.get("/health")
         # No log entry for /health path
         assert not any("/health" in r.message for r in caplog.records)
+
+    def test_metrics_endpoint(self, flask_client):
+        # Make a few requests first
+        flask_client.get("/api/products")
+        flask_client.get("/api/summary")
+
+        resp = flask_client.get("/metrics")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["requests_total"] >= 2
+        assert "GET" in data["requests_by_method"]
+        assert data["latency_avg_ms"] >= 0
+        assert data["latency_max_ms"] >= 0
+        assert "uptime_seconds" in data
+
+    def test_security_headers(self, flask_client):
+        resp = flask_client.get("/api/products")
+        assert resp.headers.get("X-Content-Type-Options") == "nosniff"
+        assert resp.headers.get("X-Frame-Options") == "DENY"
+        assert resp.headers.get("X-Request-ID") is not None
+        assert len(resp.headers.get("X-Request-ID")) == 12
+
+    def test_request_id_unique(self, flask_client):
+        r1 = flask_client.get("/api/products")
+        r2 = flask_client.get("/api/products")
+        assert r1.headers["X-Request-ID"] != r2.headers["X-Request-ID"]
