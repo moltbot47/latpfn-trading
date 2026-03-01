@@ -1,4 +1,4 @@
-.PHONY: help install test lint coverage backup docker clean
+.PHONY: help install test lint coverage backup db-maintain docker clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -9,14 +9,14 @@ install: ## Install dependencies into venv
 	pip install ruff pre-commit
 	pre-commit install
 
-test: ## Run all 218 tests
+test: ## Run all tests
 	python -m pytest tests/ -v --tb=short -x
 
 lint: ## Run ruff linter on project files
-	ruff check tests/ funding/ scripts/funding_dashboard.py scripts/backup.py scripts/health_monitor.py monitoring/logger.py
+	ruff check tests/ funding/ scripts/funding_dashboard.py scripts/backup.py scripts/health_monitor.py scripts/db_maintenance.py monitoring/logger.py
 
 lint-fix: ## Auto-fix lint issues
-	ruff check --fix tests/ funding/ scripts/funding_dashboard.py scripts/backup.py scripts/health_monitor.py monitoring/logger.py
+	ruff check --fix tests/ funding/ scripts/funding_dashboard.py scripts/backup.py scripts/health_monitor.py scripts/db_maintenance.py monitoring/logger.py
 
 coverage: ## Run tests with coverage report
 	python -m pytest tests/test_funding_models.py tests/test_funding_database.py tests/test_funding_strategy.py tests/test_funding_api.py tests/test_monitoring.py \
@@ -28,6 +28,9 @@ backup: ## Backup all SQLite databases
 
 backup-list: ## List existing backups
 	python scripts/backup.py --list
+
+db-maintain: ## Run database maintenance (VACUUM, ANALYZE, integrity check)
+	python scripts/db_maintenance.py
 
 health: ## Check service health
 	python scripts/health_monitor.py --verbose
