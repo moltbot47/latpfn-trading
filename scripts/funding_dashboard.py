@@ -679,6 +679,28 @@ def api_partner_program_summary():
 
 # ── Main Page ────────────────────────────────────────────────────────
 
+@app.route("/api/docs")
+def api_docs():
+    """Auto-generated API endpoint documentation."""
+    endpoints = []
+    for rule in sorted(app.url_map.iter_rules(), key=lambda r: r.rule):
+        if rule.rule.startswith("/static") or rule.endpoint == "static":
+            continue
+        methods = sorted(rule.methods - {"OPTIONS", "HEAD"})
+        func = app.view_functions.get(rule.endpoint)
+        doc = (func.__doc__ or "").strip() if func else ""
+        endpoints.append({
+            "path": rule.rule,
+            "methods": methods,
+            "description": doc,
+        })
+    return jsonify({
+        "version": _VERSION,
+        "endpoints": endpoints,
+        "total": len(endpoints),
+    })
+
+
 @app.route("/")
 def index():
     return Response(DASHBOARD_HTML, mimetype="text/html")

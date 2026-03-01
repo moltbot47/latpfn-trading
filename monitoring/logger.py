@@ -8,6 +8,7 @@ Supports two output formats:
 
 import json
 import logging
+import logging.handlers
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -62,8 +63,12 @@ def setup_logging(config: dict):
     console.setFormatter(formatter)
     root.addHandler(console)
 
-    # File handler
-    fh = logging.FileHandler(log_file, encoding="utf-8")
+    # File handler with rotation (10 MB max, keep 5 backups)
+    max_bytes = config["system"].get("log_max_bytes", 10 * 1024 * 1024)
+    backup_count = config["system"].get("log_backup_count", 5)
+    fh = logging.handlers.RotatingFileHandler(
+        log_file, maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8",
+    )
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(formatter)
     root.addHandler(fh)

@@ -2,9 +2,10 @@
 
 import json
 import logging
+import logging.handlers
 import time
 
-from monitoring.logger import JSONFormatter, ErrorAggregator
+from monitoring.logger import JSONFormatter, ErrorAggregator, setup_logging
 
 
 class TestJSONFormatter:
@@ -100,3 +101,52 @@ class TestErrorAggregator:
         assert len(summary) == 1
         assert summary[0]["first_seen"] == t1
         assert summary[0]["last_seen"] == t2
+
+
+class TestSetupLogging:
+    def test_creates_log_file(self, tmp_path):
+        config = {
+            "system": {
+                "log_level": "INFO",
+                "log_dir": str(tmp_path),
+                "log_format": "text",
+            }
+        }
+        setup_logging(config)
+        log_files = list(tmp_path.glob("trading_*.log"))
+        assert len(log_files) >= 1
+        # Cleanup handlers to avoid interference
+        logging.getLogger().handlers.clear()
+
+    def test_json_format_creates_json_handler(self, tmp_path):
+        config = {
+            "system": {
+                "log_level": "DEBUG",
+                "log_dir": str(tmp_path),
+                "log_format": "json",
+            }
+        }
+        setup_logging(config)
+        root = logging.getLogger()
+        # Should have at least one handler with JSONFormatter
+        json_handlers = [h for h in root.handlers if isinstance(h.formatter, JSONFormatter)]
+        assert len(json_handlers) >= 1
+        root.handlers.clear()
+
+    def test_file_handler_is_rotating(self, tmp_path):
+        config = {
+            "system": {
+                "log_level": "INFO",
+                "log_dir": str(tmp_path),
+                "log_format": "text",
+                "log_max_bytes": 1024,
+                "log_backup_count": 3,
+            }
+        }
+        setup_logging(config)
+        root = logging.getLogger()
+        rotating = [h for h in root.handlers if isinstance(h, logging.handlers.RotatingFileHandler)]
+        assert len(rotating) == 1
+        assert rotating[0].maxBytes == 1024
+        assert rotating[0].backupCount == 3
+        root.handlers.clear()

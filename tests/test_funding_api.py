@@ -250,3 +250,14 @@ class TestHealthEndpoints:
         assert resp.status_code == 200
 
         dash._rate_limit_store.clear()
+
+    def test_api_docs(self, flask_client):
+        resp = flask_client.get("/api/docs")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["total"] > 20  # should have 25+ endpoints
+        assert "version" in data
+        paths = [e["path"] for e in data["endpoints"]]
+        assert "/health" in paths
+        assert "/api/summary" in paths
+        assert "/metrics" in paths
