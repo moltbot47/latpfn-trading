@@ -155,6 +155,12 @@ class TradingBot(commands.Bot):
         self.tree.add_command(poly_close_cmd)
         self.tree.add_command(poly_mc_status_cmd)
         self.tree.add_command(poly_turbo_cmd)
+        # Funding tracker commands
+        try:
+            from funding.discord_commands import register_funding_commands
+            register_funding_commands(self)
+        except ImportError:
+            logger.debug("Funding module not available — skipping funding commands")
         await self.tree.sync()
         logger.info("Slash commands synced")
 
