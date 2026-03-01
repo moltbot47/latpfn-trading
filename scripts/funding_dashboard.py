@@ -13,7 +13,10 @@ Usage:
 import argparse
 import json
 import logging
+import os
+import platform
 import sys
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -34,6 +37,82 @@ app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB upload limit
 db = FundingDB(str(ROOT / "data" / "funding.db"))
 seed_catalog(db)
 seed_partner_programs(db)
+
+_START_TIME = time.time()
+_VERSION = "1.0.0"
+
+
+# ── Monitoring: Request Logging ──────────────────────────────────────
+
+@app.before_request
+def _before_request():
+    request._start_time = time.time()
+
+
+@app.after_request
+def _after_request(response):
+    # Skip logging for health checks to reduce noise
+    if request.path.startswith("/health"):
+        return response
+    duration_ms = (time.time() - getattr(request, "_start_time", time.time())) * 1000
+    logger.info("%s %s %s %.0fms", request.method, request.path,
+                response.status_code, duration_ms)
+    return response
+
+
+# ── Monitoring: Error Handlers ───────────────────────────────────────
+
+@app.errorhandler(404)
+def _handle_404(e):
+    return jsonify({"error": "Not found"}), 404
+
+
+@app.errorhandler(Exception)
+def _handle_500(e):
+    logger.error("Unhandled exception on %s %s: %s", request.method, request.path,
+                 e, exc_info=True)
+    return jsonify({"error": "Internal server error"}), 500
+
+
+# ── Monitoring: Health Endpoints ─────────────────────────────────────
+
+@app.route("/health")
+def health():
+    return jsonify({
+        "status": "ok",
+        "uptime_seconds": round(time.time() - _START_TIME),
+        "version": _VERSION,
+    })
+
+
+@app.route("/health/detail")
+def health_detail():
+    try:
+        products = db.product_count()
+        partners = db.partner_program_count()
+        db_ok = True
+    except Exception:
+        products = partners = 0
+        db_ok = False
+
+    import resource
+    mem_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (1024 * 1024)
+    # macOS reports bytes, Linux reports KB
+    if platform.system() == "Darwin":
+        mem_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (1024 * 1024)
+    else:
+        mem_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+
+    status = "ok" if db_ok else "degraded"
+    return jsonify({
+        "status": status,
+        "uptime_seconds": round(time.time() - _START_TIME),
+        "version": _VERSION,
+        "db": {"ok": db_ok, "products": products, "partner_programs": partners},
+        "memory_mb": round(mem_mb, 1),
+        "python_version": platform.python_version(),
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    })
 
 
 # ── API Endpoints ────────────────────────────────────────────────────

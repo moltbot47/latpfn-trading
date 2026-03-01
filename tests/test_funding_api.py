@@ -155,3 +155,43 @@ class TestSummaryAndIndex:
         resp = flask_client.get("/")
         assert resp.status_code == 200
         assert b"<!DOCTYPE html>" in resp.data or b"<html" in resp.data
+
+
+# ── Health & Monitoring ──────────────────────────────────────────────
+
+
+class TestHealthEndpoints:
+    def test_health(self, flask_client):
+        resp = flask_client.get("/health")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["status"] == "ok"
+        assert "uptime_seconds" in data
+        assert isinstance(data["uptime_seconds"], int)
+        assert "version" in data
+
+    def test_health_detail(self, flask_client):
+        resp = flask_client.get("/health/detail")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["status"] == "ok"
+        assert data["db"]["ok"] is True
+        assert data["db"]["products"] > 0
+        assert data["db"]["partner_programs"] > 0
+        assert "memory_mb" in data
+        assert "python_version" in data
+        assert "timestamp" in data
+
+    def test_404_returns_json(self, flask_client):
+        resp = flask_client.get("/nonexistent-route")
+        assert resp.status_code == 404
+        data = resp.get_json()
+        assert data["error"] == "Not found"
+
+    def test_request_logging_skips_health(self, flask_client, caplog):
+        """Health endpoints should not produce request log lines."""
+        import logging
+        with caplog.at_level(logging.INFO):
+            flask_client.get("/health")
+        # No log entry for /health path
+        assert not any("/health" in r.message for r in caplog.records)
