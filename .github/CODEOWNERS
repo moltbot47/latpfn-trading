@@ -1,0 +1,14 @@
+# Default owner for all files
+* @moltbot47
+
+# CI/CD pipeline
+.github/ @moltbot47
+
+# Core trading logic
+signals/ @moltbot47
+risk/ @moltbot47
+execution/ @moltbot47
+
+# Funding tracker
+funding/ @moltbot47
+scripts/funding_dashboard.py @moltbot47
