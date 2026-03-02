@@ -23,6 +23,7 @@ import json
 import logging
 import sys
 from datetime import datetime
+from typing import Any, Optional
 
 from .database import FundingDB
 from .models import Application, Inquiry, StrategyRound
@@ -42,7 +43,7 @@ try:
 except ImportError:
     HAS_RICH = False
 
-console = Console() if HAS_RICH else None
+console: Optional["Console"] = Console() if HAS_RICH else None  # type: ignore[name-defined]
 
 
 def _print(msg: str = ""):
@@ -107,7 +108,7 @@ def cmd_profile(args, db: FundingDB):
         _print("No credit profile found. Run: funding parse <pdf_path>")
         return
 
-    if HAS_RICH:
+    if HAS_RICH and console:
         table = Table(title=f"Credit Profile — {profile.bureau.title()}", show_header=False)
         table.add_column("Field", style="cyan")
         table.add_column("Value", style="white")
@@ -116,13 +117,20 @@ def cmd_profile(args, db: FundingDB):
         table.add_row("Score", str(profile.score or "N/A"))
         table.add_row("Total Accounts", str(profile.total_accounts or "N/A"))
         table.add_row("Open Accounts", str(profile.open_accounts or "N/A"))
-        table.add_row("Utilization", f"{profile.utilization_pct:.1f}%" if profile.utilization_pct is not None else "N/A")
-        table.add_row("Payment History", f"{profile.payment_history_pct:.1f}%" if profile.payment_history_pct is not None else "N/A")
-        table.add_row("Derogatory Marks", str(profile.derogatory_marks if profile.derogatory_marks is not None else "N/A"))
-        table.add_row("Collections", str(profile.collections if profile.collections is not None else "N/A"))
-        table.add_row("Avg Account Age", f"{profile.avg_age_years:.1f} years" if profile.avg_age_years else "N/A")
-        table.add_row("Oldest Account", f"{profile.oldest_account_years:.1f} years" if profile.oldest_account_years else "N/A")
-        table.add_row("Total Credit Limit", f"${profile.total_credit_limit:,.0f}" if profile.total_credit_limit else "N/A")
+        util = f"{profile.utilization_pct:.1f}%" if profile.utilization_pct is not None else "N/A"
+        table.add_row("Utilization", util)
+        pmt = f"{profile.payment_history_pct:.1f}%" if profile.payment_history_pct is not None else "N/A"
+        table.add_row("Payment History", pmt)
+        derog = profile.derogatory_marks if profile.derogatory_marks is not None else "N/A"
+        table.add_row("Derogatory Marks", str(derog))
+        coll = profile.collections if profile.collections is not None else "N/A"
+        table.add_row("Collections", str(coll))
+        avg_age = f"{profile.avg_age_years:.1f} years" if profile.avg_age_years else "N/A"
+        table.add_row("Avg Account Age", avg_age)
+        oldest = f"{profile.oldest_account_years:.1f} years" if profile.oldest_account_years else "N/A"
+        table.add_row("Oldest Account", oldest)
+        limit = f"${profile.total_credit_limit:,.0f}" if profile.total_credit_limit else "N/A"
+        table.add_row("Total Credit Limit", limit)
         table.add_row("Total Balance", f"${profile.total_balance:,.0f}" if profile.total_balance else "N/A")
         table.add_row("Hard Inquiries", str(profile.hard_inquiries_count or "N/A"))
         table.add_row("Parsed", profile.parsed_at[:10])
@@ -131,7 +139,8 @@ def cmd_profile(args, db: FundingDB):
     else:
         _print(f"\n=== Credit Profile — {profile.bureau.title()} ===")
         _print(f"  Score: {profile.score or 'N/A'}")
-        _print(f"  Utilization: {profile.utilization_pct:.1f}%" if profile.utilization_pct is not None else "  Utilization: N/A")
+        util = f"{profile.utilization_pct:.1f}%" if profile.utilization_pct is not None else "N/A"
+        _print(f"  Utilization: {util}")
         _print(f"  Total Accounts: {profile.total_accounts or 'N/A'}")
         _print(f"  Derogatory Marks: {profile.derogatory_marks if profile.derogatory_marks is not None else 'N/A'}")
         _print(f"  Parsed: {profile.parsed_at[:10]}")
@@ -142,7 +151,7 @@ def cmd_status(args, db: FundingDB):
     summary = db.get_funding_summary()
     readiness = get_readiness_score(db)
 
-    if HAS_RICH:
+    if HAS_RICH and console:
         # Readiness score panel
         score = readiness["score"]
         bar_filled = int(score / 5)
@@ -151,7 +160,8 @@ def cmd_status(args, db: FundingDB):
         readiness_text = f"Readiness Score: {bar} {score}/100\n"
         for factor, detail in readiness["factors"].items():
             readiness_text += f"  {factor.replace('_', ' ').title()}: {detail}\n"
-        console.print(Panel(readiness_text.strip(), title="Funding Readiness", border_style="green" if score >= 70 else "yellow"))
+        border = "green" if score >= 70 else "yellow"
+        console.print(Panel(readiness_text.strip(), title="Funding Readiness", border_style=border))
 
         # Summary table
         table = Table(title="Funding Summary")
@@ -173,7 +183,9 @@ def cmd_status(args, db: FundingDB):
     else:
         _print("\n=== Funding Dashboard ===")
         _print(f"  Readiness Score: {readiness['score']}/100")
-        _print(f"  Applications: {summary['total_applications']} (Approved: {summary['approved']}, Pending: {summary['pending']}, Denied: {summary['denied']})")
+        apps = summary['total_applications']
+        appr, pend, deny = summary['approved'], summary['pending'], summary['denied']
+        _print(f"  Applications: {apps} (Approved: {appr}, Pending: {pend}, Denied: {deny})")
         _print(f"  Total Funding: ${summary['total_funding_approved']:,.0f}")
         _print(f"  Approval Rate: {summary['approval_rate']:.0f}%")
 
@@ -272,9 +284,9 @@ def cmd_strategy(args, db: FundingDB):
         _print("No recommendations available. Upload a credit report first.")
         return
 
-    if HAS_RICH:
+    if HAS_RICH and console:
         for rec in recs:
-            impact_color = {"high": "red", "medium": "yellow", "low": "green"}.get(rec.impact, "white")
+            impact_color = {"high": "red", "medium": "yellow", "low": "green"}.get(rec.impact or "", "white")
             title = f"[{impact_color}][{rec.impact.upper() if rec.impact else 'INFO'}][/{impact_color}] {rec.title}"
             console.print(Panel(rec.detail, title=title, border_style=impact_color))
     else:
@@ -294,8 +306,8 @@ def cmd_plan(args, db: FundingDB):
     _print(f"\nPlanned Round: {len(products)} products")
     _print("-" * 60)
 
-    total_low = 0
-    total_high = 0
+    total_low = 0.0
+    total_high = 0.0
     for i, prod in enumerate(products, 1):
         limit = ""
         if prod.typical_limit_low and prod.typical_limit_high:
@@ -333,7 +345,7 @@ def cmd_rounds(args, db: FundingDB):
         _print("No funding rounds yet. Use: funding plan")
         return
 
-    if HAS_RICH:
+    if HAS_RICH and console:
         table = Table(title="Funding Rounds")
         table.add_column("#", style="dim")
         table.add_column("Name", style="cyan")
@@ -372,7 +384,7 @@ def cmd_products(args, db: FundingDB):
         _print("Product catalog is empty. It will be seeded on first run.")
         return
 
-    if HAS_RICH:
+    if HAS_RICH and console:
         table = Table(title=f"Product Catalog ({len(products)} products)")
         table.add_column("#", style="dim", width=3)
         table.add_column("Lender", style="cyan", width=14)
@@ -407,7 +419,9 @@ def cmd_products(args, db: FundingDB):
         console.print(table)
     else:
         for prod in products:
-            _print(f"  {prod.lender} — {prod.product_name} ({prod.product_type}) | Min: {prod.min_score or 'N/A'} | {prod.bureau_pulled or 'N/A'}")
+            score = prod.min_score or 'N/A'
+            bureau = prod.bureau_pulled or 'N/A'
+            _print(f"  {prod.lender} — {prod.product_name} ({prod.product_type}) | Min: {score} | {bureau}")
 
 
 def cmd_inquiries(args, db: FundingDB):
@@ -416,7 +430,7 @@ def cmd_inquiries(args, db: FundingDB):
     counts_12mo = db.get_inquiry_counts_by_bureau(12)
     counts_24mo = db.get_inquiry_counts_by_bureau(24)
 
-    if HAS_RICH:
+    if HAS_RICH and console:
         # Bureau summary
         table = Table(title="Inquiry Summary")
         table.add_column("Bureau", style="cyan")
@@ -462,7 +476,7 @@ def cmd_history(args, db: FundingDB):
         _print("No applications yet. Use: funding apply")
         return
 
-    if HAS_RICH:
+    if HAS_RICH and console:
         table = Table(title=f"Application History ({len(apps)} applications)")
         table.add_column("#", style="dim", width=3)
         table.add_column("Lender", style="cyan", width=14)

@@ -469,7 +469,8 @@ PRODUCTS = [
        docs_level="very_low", startup_grade="A+", min_time_months=3, max_line=150000,
        reference_url="https://fundbox.com/line-of-credit/",
        limit_source_url="https://www.nerdwallet.com/article/small-business/fundbox-review",
-       notes="BEST FOR STARTUPS. Soft pull only. Connect bank account — no tax returns. 3-month min. 12-24 week repayment."),
+       notes="BEST FOR STARTUPS. Soft pull only. Connect bank account — no tax returns."
+             " 3-month min. 12-24 week repayment."),
 
     _P(lender="StartCap", product_name="Startup Business Line of Credit",
        product_type="loc", min_score=650,
@@ -480,7 +481,8 @@ PRODUCTS = [
        docs_level="very_low", startup_grade="A+", min_time_months=0, max_line=250000,
        reference_url="https://www.startcap.org/start-up-business-loans/line-of-credit",
        limit_source_url="https://www.nerdwallet.com/best/small-business/startup-business-loans",
-       notes="DAY-1 STARTUPS WELCOME. No revenue required. No business plan needed. Personal credit is primary factor."),
+       notes="DAY-1 STARTUPS WELCOME. No revenue required. No business plan needed."
+             " Personal credit is primary factor."),
 
     _P(lender="Credibly", product_name="Business Line of Credit",
        product_type="loc", min_score=675,
@@ -1279,12 +1281,12 @@ for _prod in PRODUCTS:
     _key = (_prod.lender, _prod.product_name)
     if _key in _REFERRAL_DATA:
         _rdata = _REFERRAL_DATA[_key]
-        _prod.has_referral = _rdata.get("has_referral", False)
-        _prod.referral_commission_type = _rdata.get("referral_commission_type")
-        _prod.referral_commission_value = _rdata.get("referral_commission_value")
-        _prod.referral_commission_display = _rdata.get("referral_commission_display")
-        _prod.referral_url = _rdata.get("referral_url")
-        _prod.referral_requires_license = _rdata.get("referral_requires_license", False)
+        _prod.has_referral = bool(_rdata.get("has_referral", False))
+        _prod.referral_commission_type = _rdata.get("referral_commission_type")  # type: ignore[assignment]
+        _prod.referral_commission_value = _rdata.get("referral_commission_value")  # type: ignore[assignment]
+        _prod.referral_commission_display = _rdata.get("referral_commission_display")  # type: ignore[assignment]
+        _prod.referral_url = _rdata.get("referral_url")  # type: ignore[assignment]
+        _prod.referral_requires_license = bool(_rdata.get("referral_requires_license", False))
 
 # Also classify the new products
 for _prod in PRODUCTS:
@@ -1326,21 +1328,24 @@ PARTNER_PROGRAMS = [
         commission_display="20K Ultimate Rewards pts per approved card (~$250)",
         signup_url="https://creditcards.chase.com/refer-a-friend",
         has_api=False, priority=1,
-        notes="Must hold a Chase business card. New rule (Oct 2025): referral must be NEW Chase biz card customer. Max 10/month."),
+        notes="Must hold a Chase business card. New rule (Oct 2025):"
+              " referral must be NEW Chase biz card customer. Max 10/month."),
 
     _PP(lender="Amex", program_name="Member Referral",
         program_type="referral", commission_type="points",
         commission_display="20K-45K Membership Rewards pts per approved card (~$200-$450)",
         signup_url="https://www.americanexpress.com/en-us/referral",
         has_api=False, priority=1,
-        notes="Must hold an Amex card. Bonus earned even if friend picks different card. Annual caps vary by card. 1099 issued."),
+        notes="Must hold an Amex card. Bonus earned even if friend picks different card."
+              " Annual caps vary by card. 1099 issued."),
 
     _PP(lender="Capital One", program_name="Refer-a-Business",
         program_type="referral", commission_type="flat_fee",
         commission_display="$200 per approved card",
         signup_url="https://www.capitalone.com/small-business/credit-cards/lp/refer-a-business/",
         has_api=False, priority=1,
-        notes="Must hold Capital One biz card. Referral cannot be existing Capital One biz cardholder. Payout in 8 weeks."),
+        notes="Must hold Capital One biz card."
+              " Referral cannot be existing Capital One biz cardholder. Payout in 8 weeks."),
 
     _PP(lender="Credit Suite", program_name="Lendavo Affiliate",
         program_type="affiliate", commission_type="flat_fee",
@@ -1348,14 +1353,16 @@ PARTNER_PROGRAMS = [
         signup_url="https://info.creditsuite.com/affiliate/",
         portal_url="https://cspartner.profitlifter.com/",
         has_api=False, priority=1,
-        notes="No cost, no selling, no fulfillment. Profit Lifter platform with automated website, CRM, marketing. Real-time tracking."),
+        notes="No cost, no selling, no fulfillment. Profit Lifter platform with automated"
+              " website, CRM, marketing. Real-time tracking."),
 
     _PP(lender="ARF Financial", program_name="Loan Stars",
         program_type="partner", commission_type="percentage",
         commission_display="8% total (4% upfront + 4% over time)",
         signup_url="https://www.arffinancial.com/loanstars/",
         has_api=False, priority=1,
-        notes="No annual fees. Stella AI for deal submission (+1% bonus). Biweekly webinars. Override commissions for recruiting."),
+        notes="No annual fees. Stella AI for deal submission (+1% bonus)."
+              " Biweekly webinars. Override commissions for recruiting."),
 
     _PP(lender="StartCap", program_name="Affiliates",
         program_type="affiliate", commission_type="percentage",
@@ -1370,7 +1377,8 @@ PARTNER_PROGRAMS = [
         commission_display="$200 per funded deal",
         signup_url="https://www.biz2credit.com/partners/affiliate-program",
         has_api=True, priority=1,
-        notes="Biz2X embedded finance API available. 203% revenue growth 2021-2024. Low-code/no-code integration options."),
+        notes="Biz2X embedded finance API available. 203% revenue growth 2021-2024."
+              " Low-code/no-code integration options."),
 
     # Priority 2 — 1-2 week onboarding
     _PP(lender="Greenbox Capital", program_name="ISO Program",
@@ -1378,7 +1386,8 @@ PARTNER_PROGRAMS = [
         commission_display="15-19% of funded amount (highest in industry)",
         signup_url="https://www.greenboxcapital.com/iso-application/",
         has_api=False, priority=2,
-        notes="'The Box' portal for deal submission. Uber-like experience. Lowest syndication fees. Call 1-855-442-3423."),
+        notes="'The Box' portal for deal submission. Uber-like experience."
+              " Lowest syndication fees. Call 1-855-442-3423."),
 
     _PP(lender="Credibly", program_name="Agent Program",
         program_type="partner", commission_type="percentage",
@@ -1402,7 +1411,8 @@ PARTNER_PROGRAMS = [
         commission_display="5% of first-year card spend (recurring)",
         signup_url="https://ramp.com/partnerships",
         has_api=False, priority=2,
-        notes="Tiers: Partner > Bronze > Silver > Titanium. Payout after referral spends $1K+. ACH by 3rd week of month."),
+        notes="Tiers: Partner > Bronze > Silver > Titanium."
+              " Payout after referral spends $1K+. ACH by 3rd week of month."),
 
     _PP(lender="Brex", program_name="Partner Referrals",
         program_type="partner", commission_type="flat_fee",
@@ -1438,7 +1448,8 @@ PARTNER_PROGRAMS = [
         commission_display="Revenue share on funded deals (negotiated)",
         signup_url="https://www.lendio.com/partners",
         has_api=True, priority=3,
-        notes="Single JS line deploys marketplace. Offer data via API. IQ instant qualification. Dedicated account manager."),
+        notes="Single JS line deploys marketplace. Offer data via API."
+              " IQ instant qualification. Dedicated account manager."),
 
     _PP(lender="National Funding", program_name="ISO Program",
         program_type="iso", commission_type="percentage",
@@ -1459,7 +1470,8 @@ PARTNER_PROGRAMS = [
         commission_display="2% referral agent fee per deal",
         signup_url="https://www.sba.gov/document/sba-form-159-fee-disclosure-compensation-agreement",
         has_api=False, priority=3,
-        notes="Form 159 required per deal. Fee must be 'necessary and reasonable'. Cannot be paid by both borrower AND lender. If >$2500, attach justification."),
+        notes="Form 159 required per deal. Fee must be 'necessary and reasonable'."
+              " Cannot be paid by both borrower AND lender. If >$2500, attach justification."),
 ]
 
 

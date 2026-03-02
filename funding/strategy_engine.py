@@ -195,7 +195,7 @@ def get_readiness_score(db: FundingDB) -> dict:
 # ── Internal Recommendation Generators ───────────────────────────────
 
 def _score_optimization(profile: CreditProfile, start_priority: int) -> list[Recommendation]:
-    recs = []
+    recs: list[Recommendation] = []
     if not profile.score:
         return recs
 
@@ -220,7 +220,7 @@ def _score_optimization(profile: CreditProfile, start_priority: int) -> list[Rec
 
 
 def _utilization_optimization(profile: CreditProfile, start_priority: int) -> list[Recommendation]:
-    recs = []
+    recs: list[Recommendation] = []
     if profile.utilization_pct is None:
         return recs
 
@@ -255,7 +255,7 @@ def _utilization_optimization(profile: CreditProfile, start_priority: int) -> li
 
 
 def _inquiry_management(inquiries: list[Inquiry], apps: list[Application], start_priority: int) -> list[Recommendation]:
-    recs = []
+    recs: list[Recommendation] = []
     p = start_priority
 
     # Group by bureau (last 12 months)
@@ -277,7 +277,7 @@ def _inquiry_management(inquiries: list[Inquiry], apps: list[Application], start
     # Find least-hit bureau
     bureaus = ["experian", "transunion", "equifax"]
     bureau_counts = {b: len(by_bureau.get(b, [])) for b in bureaus}
-    least_hit = min(bureau_counts, key=bureau_counts.get)
+    least_hit = min(bureau_counts, key=lambda b: bureau_counts[b])
 
     recs.append(Recommendation(
         priority=p, category="inquiry_mgmt",
@@ -318,7 +318,7 @@ def _inquiry_management(inquiries: list[Inquiry], apps: list[Application], start
 
 
 def _cooling_period_check(last_round: Optional[StrategyRound], start_priority: int) -> list[Recommendation]:
-    recs = []
+    recs: list[Recommendation] = []
     if not last_round or not last_round.executed_date:
         return recs
 
@@ -357,7 +357,7 @@ def _eligible_products(
     products: list[FundingProduct],
     start_priority: int,
 ) -> list[Recommendation]:
-    recs = []
+    recs: list[Recommendation] = []
     eligible = _get_eligible_products(profile, inquiries, apps, products)
 
     if not eligible:
@@ -395,7 +395,7 @@ def _application_order(
     products: list[FundingProduct],
     start_priority: int,
 ) -> list[Recommendation]:
-    recs = []
+    recs: list[Recommendation] = []
     eligible = _get_eligible_products(profile, inquiries, apps, products)
     if not eligible:
         return recs
@@ -424,7 +424,7 @@ def _application_order(
 
 
 def _derogatory_check(profile: CreditProfile, start_priority: int) -> list[Recommendation]:
-    recs = []
+    recs: list[Recommendation] = []
     derogs = (profile.derogatory_marks or 0) + (profile.collections or 0)
 
     if derogs > 0:

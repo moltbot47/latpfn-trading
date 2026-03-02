@@ -313,12 +313,24 @@ class FundingProduct:
             min_time_months=row["min_time_months"] if "min_time_months" in keys else None,
             max_line=row["max_line"] if "max_line" in keys else None,
             lender_type=row["lender_type"] if "lender_type" in keys else None,
-            has_referral=bool(row["has_referral"]) if "has_referral" in keys and row["has_referral"] is not None else False,
+            has_referral=(
+                bool(row["has_referral"])
+                if "has_referral" in keys and row["has_referral"] is not None
+                else False
+            ),
             referral_commission_type=row["referral_commission_type"] if "referral_commission_type" in keys else None,
-            referral_commission_value=row["referral_commission_value"] if "referral_commission_value" in keys else None,
-            referral_commission_display=row["referral_commission_display"] if "referral_commission_display" in keys else None,
+            referral_commission_value=(
+                row["referral_commission_value"] if "referral_commission_value" in keys else None
+            ),
+            referral_commission_display=(
+                row["referral_commission_display"] if "referral_commission_display" in keys else None
+            ),
             referral_url=row["referral_url"] if "referral_url" in keys else None,
-            referral_requires_license=bool(row["referral_requires_license"]) if "referral_requires_license" in keys and row["referral_requires_license"] is not None else False,
+            referral_requires_license=(
+                bool(row["referral_requires_license"])
+                if "referral_requires_license" in keys and row["referral_requires_license"] is not None
+                else False
+            ),
         )
 
 

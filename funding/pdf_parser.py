@@ -9,7 +9,7 @@ Also supports Credit Karma, Credit Sesame, and AnnualCreditReport.com formats.
 import logging
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from .models import CreditProfile, Inquiry
 
@@ -630,7 +630,7 @@ def _extract_account_ages(text: str, profile: CreditProfile):
 
 def _extract_inquiries(text: str, bureau: str) -> list[Inquiry]:
     """Extract hard inquiry list from report text."""
-    inquiries = []
+    inquiries: list[Inquiry] = []
 
     # Look for inquiry section
     inquiry_section = _find_section(text, [
@@ -766,7 +766,7 @@ def _add_years(date_str: str, years: int) -> str:
 
 def analyze_credit_health(profile: CreditProfile) -> dict:
     """Generate credit health analysis from a parsed profile."""
-    analysis = {
+    analysis: dict[str, Any] = {
         "factors": [],
         "warnings": [],
         "strengths": [],

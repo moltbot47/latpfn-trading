@@ -5,6 +5,7 @@ Register these commands in the existing bot's setup_hook().
 
 import logging
 from datetime import datetime
+from typing import Any, Optional
 
 import discord
 from discord import app_commands
@@ -23,7 +24,7 @@ from .strategy_engine import get_readiness_score, get_recommendations
 logger = logging.getLogger(__name__)
 
 # Shared DB instance
-_db: FundingDB = None
+_db: Optional[FundingDB] = None
 
 
 def get_db() -> FundingDB:
@@ -59,7 +60,8 @@ async def funding_strategy_cmd(interaction: discord.Interaction):
         db = get_db()
         recs = get_recommendations(db)
         if not recs:
-            await interaction.followup.send("No recommendations yet. Upload a credit report first via CLI.", ephemeral=True)
+            msg = "No recommendations yet. Upload a credit report first via CLI."
+            await interaction.followup.send(msg, ephemeral=True)
             return
         embed = strategy_embed(recs)
         await interaction.followup.send(embed=embed)
@@ -103,8 +105,8 @@ async def funding_apply_cmd(
     product: str,
     product_type: app_commands.Choice[str],
     status: app_commands.Choice[str],
-    amount: float = None,
-    bureau: app_commands.Choice[str] = None,
+    amount: Optional[float] = None,
+    bureau: Optional[app_commands.Choice[str]] = None,
 ):
     """Log a new funding application."""
     await interaction.response.defer(thinking=True)
@@ -166,7 +168,7 @@ async def funding_update_cmd(
     interaction: discord.Interaction,
     app_id: int,
     status: app_commands.Choice[str],
-    amount: float = None,
+    amount: Optional[float] = None,
 ):
     """Update an application status."""
     await interaction.response.defer(thinking=True)
@@ -177,7 +179,7 @@ async def funding_update_cmd(
             await interaction.followup.send(f"Application #{app_id} not found.", ephemeral=True)
             return
 
-        kwargs = {"status": status.value}
+        kwargs: dict[str, Any] = {"status": status.value}
         if status.value in ("approved", "denied"):
             kwargs["decision_date"] = datetime.utcnow().strftime("%Y-%m-%d")
         if amount and status.value == "approved":
@@ -208,7 +210,8 @@ async def funding_milestone_cmd(interaction: discord.Interaction, app_id: int):
             return
 
         if app.status != "approved":
-            await interaction.followup.send(f"Application #{app_id} is not approved (status: {app.status}).", ephemeral=True)
+            msg = f"Application #{app_id} is not approved (status: {app.status})."
+            await interaction.followup.send(msg, ephemeral=True)
             return
 
         summary = db.get_funding_summary()

@@ -4,7 +4,7 @@ import logging
 import os
 import sqlite3
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from .models import (
     Application, CreditProfile, FundingProduct, Inquiry,
@@ -250,8 +250,9 @@ class FundingDB:
                 ),
             )
             conn.commit()
-            logger.info("Saved credit profile id=%d bureau=%s score=%s", cur.lastrowid, d["bureau"], d["score"])
-            return cur.lastrowid
+            row_id: int = cur.lastrowid  # type: ignore[assignment]
+            logger.info("Saved credit profile id=%d bureau=%s score=%s", row_id, d["bureau"], d["score"])
+            return row_id
         finally:
             conn.close()
 
@@ -278,7 +279,7 @@ class FundingDB:
                     d["pdf_filename"], d["raw_extracted_text"],
                 ),
             )
-            profile_id = cur.lastrowid
+            profile_id: int = cur.lastrowid  # type: ignore[assignment]
             for inq in inquiries:
                 di = inq.to_dict()
                 conn.execute(
@@ -343,8 +344,9 @@ class FundingDB:
                 ),
             )
             conn.commit()
-            logger.info("Saved application id=%d lender=%s status=%s", cur.lastrowid, d["lender"], d["status"])
-            return cur.lastrowid
+            row_id: int = cur.lastrowid  # type: ignore[assignment]
+            logger.info("Saved application id=%d lender=%s status=%s", row_id, d["lender"], d["status"])
+            return row_id
         finally:
             conn.close()
 
@@ -386,7 +388,7 @@ class FundingDB:
         conn = self._get_conn()
         try:
             query = "SELECT * FROM applications"
-            params = []
+            params: list[Any] = []
             wheres = []
             if status:
                 wheres.append("status=?")
@@ -417,7 +419,8 @@ class FundingDB:
                 (d["date"], d["bureau"], d["lender"], d["falls_off_date"], d["source"], d["application_id"]),
             )
             conn.commit()
-            return cur.lastrowid
+            row_id: int = cur.lastrowid  # type: ignore[assignment]
+            return row_id
         finally:
             conn.close()
 
@@ -461,12 +464,17 @@ class FundingDB:
         try:
             d = rnd.to_dict()
             cur = conn.execute(
-                """INSERT INTO strategy_rounds (name, planned_date, executed_date, status, target_total, actual_total, notes)
+                """INSERT INTO strategy_rounds
+                   (name, planned_date, executed_date, status, target_total, actual_total, notes)
                    VALUES (?,?,?,?,?,?,?)""",
-                (d["name"], d["planned_date"], d["executed_date"], d["status"], d["target_total"], d["actual_total"], d["notes"]),
+                (
+                    d["name"], d["planned_date"], d["executed_date"],
+                    d["status"], d["target_total"], d["actual_total"], d["notes"],
+                ),
             )
             conn.commit()
-            return cur.lastrowid
+            row_id: int = cur.lastrowid  # type: ignore[assignment]
+            return row_id
         finally:
             conn.close()
 
@@ -544,7 +552,8 @@ class FundingDB:
                 ),
             )
             conn.commit()
-            return cur.lastrowid
+            row_id: int = cur.lastrowid  # type: ignore[assignment]
+            return row_id
         finally:
             conn.close()
 
@@ -588,8 +597,9 @@ class FundingDB:
                 (d["name"], d["email"], d["phone"], d["notes"], d["created_at"]),
             )
             conn.commit()
-            logger.info("Saved referral client id=%d name=%s", cur.lastrowid, d["name"])
-            return cur.lastrowid
+            row_id: int = cur.lastrowid  # type: ignore[assignment]
+            logger.info("Saved referral client id=%d name=%s", row_id, d["name"])
+            return row_id
         finally:
             conn.close()
 
@@ -620,8 +630,9 @@ class FundingDB:
                 ),
             )
             conn.commit()
-            logger.info("Saved referral id=%d client=%d product=%d", cur.lastrowid, d["client_id"], d["product_id"])
-            return cur.lastrowid
+            row_id: int = cur.lastrowid  # type: ignore[assignment]
+            logger.info("Saved referral id=%d client=%d product=%d", row_id, d["client_id"], d["product_id"])
+            return row_id
         finally:
             conn.close()
 
@@ -644,8 +655,8 @@ class FundingDB:
                 return None
             ref = Referral.from_row(row)
             # Attach product commission info as extra attrs for convenience
-            ref._commission_type = row["referral_commission_type"]
-            ref._commission_value = row["referral_commission_value"]
+            object.__setattr__(ref, "_commission_type", row["referral_commission_type"])
+            object.__setattr__(ref, "_commission_value", row["referral_commission_value"])
             return ref
         finally:
             conn.close()
@@ -749,7 +760,8 @@ class FundingDB:
                 ),
             )
             conn.commit()
-            return cur.lastrowid
+            row_id: int = cur.lastrowid  # type: ignore[assignment]
+            return row_id
         finally:
             conn.close()
 
