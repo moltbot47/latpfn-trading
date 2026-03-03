@@ -254,16 +254,92 @@ class PlatformEmitter:
             )
 
     def edge_gate(self, asset: str, direction: str, allowed: bool, reason: str):
-        """Emit an edge gate decision. Only emits PASS (allowed) events."""
-        if not allowed:
-            return  # Don't emit edge gate blocks — too noisy
+        """Emit an edge gate decision (pass and block)."""
         self.emit(
             event_type="edge_gate",
-            outcome="pass",
+            outcome="pass" if allowed else "block",
             instrument=f"{asset.upper()}",
             payload={
                 "direction": direction,
                 "reason": reason,
+            },
+        )
+
+    # ── Generic strategy events (sniper, superforecaster, max_concurrent) ──
+
+    def strategy_trade(
+        self,
+        strategy: str,
+        question: str,
+        direction: str,
+        entry_price: float,
+        size_usdc: float,
+        divergence: float = 0,
+        llm_probability: float = 0,
+        market_price: float = 0,
+    ):
+        """Emit a trade event for any strategy."""
+        self.emit(
+            event_type="execution",
+            outcome="pass",
+            instrument=strategy,
+            confidence=abs(divergence) if divergence else None,
+            cycle_id=f"{strategy}_{int(time.time())}",
+            payload={
+                "strategy": strategy,
+                "question": question[:80],
+                "direction": direction,
+                "entry_price": round(entry_price, 4),
+                "size_usdc": round(size_usdc, 2),
+                "divergence": round(divergence, 4) if divergence else 0,
+                "llm_probability": round(llm_probability, 4) if llm_probability else 0,
+                "market_price": round(market_price, 4) if market_price else 0,
+            },
+        )
+
+    def strategy_exit(
+        self,
+        strategy: str,
+        question: str,
+        pnl: float,
+        reason: str,
+        exit_price: float = 0,
+    ):
+        """Emit an exit event for any strategy."""
+        self.emit(
+            event_type="resolution",
+            outcome="win" if pnl > 0 else "loss",
+            instrument=strategy,
+            cycle_id=f"{strategy}_{int(time.time())}",
+            payload={
+                "strategy": strategy,
+                "question": question[:80],
+                "pnl": round(pnl, 4),
+                "reason": reason,
+                "exit_price": round(exit_price, 4) if exit_price else 0,
+            },
+        )
+
+    def strategy_claim(
+        self,
+        condition_id: str,
+        question: str,
+        usdc_received: float,
+        positions_resolved: int,
+        outcome: float,
+    ):
+        """Emit a claim/redemption event."""
+        self.emit(
+            event_type="resolution",
+            outcome="win" if usdc_received > 0 else "loss",
+            instrument="claimer",
+            cycle_id=f"claim_{condition_id[:12]}_{int(time.time())}",
+            payload={
+                "condition_id": condition_id[:16],
+                "question": question[:80],
+                "usdc_received": round(usdc_received, 4),
+                "positions_resolved": positions_resolved,
+                "market_outcome": "YES" if outcome == 1.0 else "NO",
             },
         )
 

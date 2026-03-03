@@ -241,10 +241,24 @@ class PositionClaimer:
 
                 if not has_tokens:
                     # Tokens already sold/redeemed — just mark positions resolved
+                    outcome = None
                     for key, pos in positions:
                         payout = self._compute_payout(ctf, condition_bytes, pos)
                         position_mgr.resolve_position(key, payout)
+                        if outcome is None and payout is not None:
+                            if pos.direction == "YES":
+                                outcome = 1.0 if payout > 0 else 0.0
+                            else:
+                                outcome = 0.0 if payout > 0 else 1.0
                     self._claimed_conditions.add(condition_id)
+                    results.append({
+                        "condition_id": condition_id,
+                        "question": positions[0][1].question,
+                        "tx_hash": "",
+                        "usdc_received": 0,
+                        "positions_resolved": len(positions),
+                        "outcome": outcome,
+                    })
                     logger.debug(
                         "Resolved %s: no tokens to redeem (already exited)",
                         condition_id[:12],
@@ -278,9 +292,16 @@ class PositionClaimer:
                 usdc_received = usdc_after - usdc_before
 
                 # Determine payouts and resolve tracked positions
+                outcome = None  # 1.0=YES won, 0.0=NO won
                 for key, pos in positions:
                     payout = self._compute_payout(ctf, condition_bytes, pos)
                     position_mgr.resolve_position(key, payout)
+                    # Infer market outcome from payout
+                    if outcome is None and payout is not None:
+                        if pos.direction == "YES":
+                            outcome = 1.0 if payout > 0 else 0.0
+                        else:
+                            outcome = 0.0 if payout > 0 else 1.0
 
                 self._claimed_conditions.add(condition_id)
 
@@ -290,6 +311,7 @@ class PositionClaimer:
                     "tx_hash": tx_hash,
                     "usdc_received": round(usdc_received, 4),
                     "positions_resolved": len(positions),
+                    "outcome": outcome,
                 }
                 results.append(result)
                 logger.info(

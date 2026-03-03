@@ -41,8 +41,23 @@ class PolymarketRisk:
         self.starting_budget = self.budget
 
     def update_budget(self, new_budget: float):
-        """Update budget (e.g., after deposits or after reconciling with API)."""
+        """Update budget from live balance.
+
+        IMPORTANT: new_budget should be TOTAL capital (cash + deployed),
+        not just available cash.  If you only have the cash balance from
+        get_balance(), call sync_budget_from_cash() instead.
+        """
         self.budget = new_budget
+
+    def sync_budget_from_cash(self, cash_balance: float):
+        """Sync budget from available cash balance.
+
+        Total capital = cash in wallet + capital deployed in open positions.
+        Using only cash would shrink the budget as positions are opened,
+        eventually blocking all new trades.
+        """
+        deployed = self.positions.total_deployed()
+        self.budget = cash_balance + deployed
 
     def can_trade(self, strategy: str = None) -> tuple[bool, str]:
         """

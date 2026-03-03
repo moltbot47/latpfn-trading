@@ -25,6 +25,7 @@ import requests
 
 from monitoring.turbo_analytics import TurboAnalytics
 from polymarket.edge_engine import AdaptiveEdgeEngine
+from polymarket.platform_emitter import get_emitter
 from polymarket.positions import PolyPosition
 
 logger = logging.getLogger(__name__)
@@ -352,8 +353,9 @@ class TurboStrategy:
                 if claims:
                     balance = self.client.get_balance()
                     if balance > 0:
-                        self.risk.update_budget(balance)
-                    logger.info("[TURBO] Claimed %d positions", len(claims))
+                        self.risk.sync_budget_from_cash(balance)
+                    logger.info("[TURBO] Claimed %d positions, balance=$%.2f, total=$%.2f",
+                                len(claims), balance, self.risk.budget)
             except asyncio.TimeoutError:
                 logger.warning("[TURBO] Claim timed out (60s)")
                 self._last_claim_time = now
@@ -362,6 +364,15 @@ class TurboStrategy:
                 self._last_claim_time = now
 
         # ── 4. Log periodic status ───────────────────────────────────
+        # Heartbeat to live dashboard (every ~60s)
+        if self.cycle % 12 == 1:
+            try:
+                emitter = get_emitter()
+                emitter.heartbeat()
+                emitter.price_fetch(self._price_history)
+            except Exception:
+                pass
+
         if self.cycle % 60 == 1:  # Every ~5 minutes
             turbo_count = len(self.positions.get_positions_by_strategy("turbo"))
             conv = self._intel.get("convergence", 0)
@@ -454,6 +465,13 @@ class TurboStrategy:
             skip_reason=skip_reason,
             intel_convergence=conv, intel_multiplier=mult,
         )
+
+        # Emit to live dashboard (only signals and blocks, not too_early/too_late spam)
+        if signal or skip_reason in ("no_signal", "position_limit", "cooldown") or skip_reason.startswith("edge_"):
+            try:
+                get_emitter().signal_check(asset, tf, momentum, signal, skip_reason)
+            except Exception:
+                pass
 
         if signal:
             await self._execute_trade(existing, signal)
@@ -835,6 +853,18 @@ class TurboStrategy:
             size_usdc, streak_mult, signal["seconds_left"], signal["reason"],
         )
 
+        # Emit trade to live dashboard
+        try:
+            get_emitter().trade_executed(
+                asset=window.asset, tf=window.timeframe,
+                direction=direction, entry_price=price,
+                shares=shares, size_usdc=size_usdc,
+                reason=signal["reason"],
+                cycle_id=f"turbo_{window.slug}",
+            )
+        except Exception:
+            pass
+
         # Discord notification
         if self._bot:
             try:
@@ -920,6 +950,18 @@ class TurboStrategy:
             "[TURBO] RESOLVED: %s → %s | PnL=$%.2f (total: $%.2f)",
             question, result_str, pnl, self.session_pnl,
         )
+
+        # Emit resolution to live dashboard
+        try:
+            get_emitter().trade_resolved(
+                asset=window.asset, tf=window.timeframe,
+                direction=window.trade_direction,
+                outcome_price=outcome_price, pnl=pnl,
+                session_pnl=self.session_pnl,
+                cycle_id=f"turbo_{window.slug}",
+            )
+        except Exception:
+            pass
 
         # Discord notification
         if self._bot:
@@ -1011,6 +1053,8 @@ class TurboStrategy:
             "positions": len(turbo_pos),
             "max_positions": self.max_positions,
             "deployed": round(deployed, 2),
+            "budget": round(self.risk.budget, 2),
+            "available": round(max(0, self.risk.budget * self.risk.max_exposure - self.positions.total_deployed()), 2),
             "session_trades": self.total_trades,
             "session_wins": self.total_wins,
             "session_losses": self.total_losses,

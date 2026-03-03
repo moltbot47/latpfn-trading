@@ -21,6 +21,7 @@ from polymarket.resolution_sniper import ResolutionSniper
 from polymarket.risk import PolymarketRisk
 from polymarket.scanner import MarketScanner
 from polymarket.superforecaster import SuperforecasterStrategy
+from polymarket.platform_emitter import get_emitter
 from polymarket.turbo_strategy import TurboStrategy
 
 logger = logging.getLogger(__name__)
@@ -80,16 +81,17 @@ class PolymarketOrchestrator:
         logger.info("Starting Polymarket orchestrator...")
         await self.client.connect()
 
-        # Update budget from live balance (Bug 2 fix: sync all components)
+        # Update budget from live balance — use total capital (cash + deployed)
         balance = self.client.get_balance()
         if balance > 0:
-            self.risk.update_budget(balance)
-            self.sniper.budget = balance
-            self.superforecaster.budget = balance
+            self.risk.sync_budget_from_cash(balance)
+            total = self.risk.budget  # cash + deployed
+            self.sniper.budget = total
+            self.superforecaster.budget = total
             mc_cfg = self.config.get("polymarket", {}).get("max_concurrent", {})
-            self.max_concurrent_strategy.budget = balance * mc_cfg.get("budget_pct", 0.35)
-            logger.info("Polymarket balance: $%.2f (MC budget: $%.2f)",
-                        balance, self.max_concurrent_strategy.budget)
+            self.max_concurrent_strategy.budget = total * mc_cfg.get("budget_pct", 0.35)
+            logger.info("Polymarket balance: $%.2f cash, $%.2f total (MC budget: $%.2f)",
+                        balance, total, self.max_concurrent_strategy.budget)
 
         self.is_running = True
 
@@ -151,17 +153,33 @@ class PolymarketOrchestrator:
                 timeout=90,
             )
             if claims:
+                # Log resolutions to forecaster DB + emit to platform
+                emitter = get_emitter()
+                for claim in claims:
+                    outcome = claim.get("outcome")
+                    cid = claim.get("condition_id", "")
+                    if outcome is not None and cid:
+                        self.forecaster.log_resolution(cid, outcome)
+                        emitter.strategy_claim(
+                            condition_id=cid,
+                            question=claim.get("question", ""),
+                            usdc_received=claim.get("usdc_received", 0),
+                            positions_resolved=claim.get("positions_resolved", 0),
+                            outcome=outcome,
+                        )
+
                 # Refresh balance after claims returned USDC to Safe
                 balance = self.client.get_balance()
                 if balance > 0:
-                    self.risk.update_budget(balance)
-                    self.sniper.budget = balance
-                    self.superforecaster.budget = balance
+                    self.risk.sync_budget_from_cash(balance)
+                    total = self.risk.budget
+                    self.sniper.budget = total
+                    self.superforecaster.budget = total
                     mc_cfg = self.config.get("polymarket", {}).get("max_concurrent", {})
-                    self.max_concurrent_strategy.budget = balance * mc_cfg.get("budget_pct", 0.35)
+                    self.max_concurrent_strategy.budget = total * mc_cfg.get("budget_pct", 0.35)
                     logger.info(
-                        "Post-claim balance: $%.2f (MC budget: $%.2f)",
-                        balance, self.max_concurrent_strategy.budget,
+                        "Post-claim balance: $%.2f cash, $%.2f total (MC budget: $%.2f)",
+                        balance, total, self.max_concurrent_strategy.budget,
                     )
         except asyncio.TimeoutError:
             logger.warning("Auto-claim timed out (90s)")
@@ -328,6 +346,32 @@ class PolymarketOrchestrator:
             len(result["executed"]),
             len(result["exits"]),
         )
+
+        # ── Platform emission (all strategies) ─────────────────────
+        try:
+            emitter = get_emitter()
+            for trade in result.get("executed", []):
+                strategy = trade.get("strategy", trade.get("position_key", "").split("_")[0] if trade.get("position_key") else "unknown")
+                emitter.strategy_trade(
+                    strategy=strategy,
+                    question=trade.get("question", ""),
+                    direction=trade.get("direction", ""),
+                    entry_price=trade.get("entry_price", 0),
+                    size_usdc=trade.get("size_usdc", 0),
+                    divergence=trade.get("divergence", 0),
+                    llm_probability=trade.get("llm_probability", 0),
+                    market_price=trade.get("market_price", 0),
+                )
+            for exit_info in result.get("exits", []):
+                emitter.strategy_exit(
+                    strategy=exit_info.get("strategy", "orchestrator"),
+                    question=exit_info.get("question", exit_info.get("key", "")),
+                    pnl=exit_info.get("pnl", 0),
+                    reason=exit_info.get("reason", ""),
+                    exit_price=exit_info.get("exit_price", 0),
+                )
+        except Exception as e:
+            logger.debug("Platform emission error: %s", e)
 
         # ── Discord notifications ─────────────────────────────────
         if self._bot:
