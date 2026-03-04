@@ -14,13 +14,13 @@ class OpenPositions(Static):
 
     def update_positions(self, positions: list):
         self._positions = positions
-        self._render()
+        self._refresh_display()
 
     def update_price(self, token_id: str, mid: float):
         self._prices[token_id] = mid
-        self._render()
+        self._refresh_display()
 
-    def _render(self):
+    def _refresh_display(self):
         lines = [
             f" {'Asset':5s} {'Dir':4s} {'Entry':>6s} {'Mark':>6s} {'$Size':>6s} {'Unreal':>8s} {'Age':>4s}",
             f" {'─'*5} {'─'*4} {'─'*6} {'─'*6} {'─'*6} {'─'*8} {'─'*4}",

@@ -273,6 +273,12 @@ class TradingSystem:
                                 logger.warning("Discord post failed (%d): %s", self._discord_fail_count, e)
                             elif self._discord_fail_count == 4:
                                 logger.error("Discord appears disconnected — alerts not being delivered")
+
+                # EOD trail: update drawdown floor at session close (flat = closing balance)
+                if self.apex.drawdown_type == "eod":
+                    closing_balance = self.config["execution"].get("default_equity", 50000)
+                    self.apex.update_eod_balance(closing_balance)
+
                 await asyncio.sleep(60)
                 continue
 

@@ -16,7 +16,10 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 DB_PATH = PROJECT_ROOT / "data" / "turbo_analytics.db"
+CME_DB_PATH = PROJECT_ROOT / "data" / "trade_log.db"
+BROKER_DB_PATH = PROJECT_ROOT / "data" / "broker_reports.db"
 POSITIONS_PATH = PROJECT_ROOT / "data" / "polymarket_positions.json"
+CME_POSITIONS_PATH = PROJECT_ROOT / "data" / "positions.json"
 
 
 @dataclass
@@ -464,3 +467,209 @@ class DataManager:
         except Exception as e:
             logger.debug("HL data poll failed: %s", e)
             return None
+
+    def poll_cme_trades(self) -> Dict[str, Any]:
+        """Read CME trade_log.db. Call from worker thread."""
+        try:
+            if not CME_DB_PATH.exists():
+                return {"trades": [], "scorecard": {}, "pnl_series": []}
+
+            conn = sqlite3.connect(str(CME_DB_PATH), timeout=1.0)
+            conn.row_factory = sqlite3.Row
+
+            # Recent trades (last 200 resolved)
+            rows = conn.execute(
+                """SELECT id, timestamp, instrument, direction, shot_tier,
+                          entry_price, exit_price, exit_reason, pnl_dollars,
+                          regime, rr_ratio, time_in_trade_minutes
+                   FROM trades
+                   WHERE exit_price IS NOT NULL
+                   ORDER BY id DESC LIMIT 200"""
+            ).fetchall()
+
+            trades = []
+            for r in rows:
+                pnl = r["pnl_dollars"] or 0
+                trades.append({
+                    "id": r["id"],
+                    "timestamp": r["timestamp"],
+                    "instrument": r["instrument"],
+                    "direction": r["direction"],
+                    "tier": r["shot_tier"] or "unknown",
+                    "entry": r["entry_price"] or 0,
+                    "exit": r["exit_price"] or 0,
+                    "exit_reason": r["exit_reason"] or "unknown",
+                    "pnl": round(pnl, 2),
+                    "regime": r["regime"] or "unknown",
+                    "rr_ratio": round(r["rr_ratio"] or 0, 2),
+                    "time_minutes": round(r["time_in_trade_minutes"] or 0, 1),
+                    "result": "win" if pnl > 0 else "loss",
+                })
+
+            # Scorecard (24h)
+            cutoff_24h = time.strftime(
+                "%Y-%m-%dT%H:%M:%S",
+                time.gmtime(time.time() - 24 * 3600),
+            )
+            sc = conn.execute(
+                """SELECT
+                    COUNT(*) as total,
+                    SUM(CASE WHEN pnl_dollars > 0 THEN 1 ELSE 0 END) as wins,
+                    SUM(CASE WHEN pnl_dollars <= 0 THEN 1 ELSE 0 END) as losses,
+                    SUM(pnl_dollars) as total_pnl,
+                    AVG(CASE WHEN pnl_dollars > 0 THEN pnl_dollars END) as avg_win,
+                    AVG(CASE WHEN pnl_dollars <= 0 THEN pnl_dollars END) as avg_loss,
+                    MAX(pnl_dollars) as best,
+                    MIN(pnl_dollars) as worst
+                   FROM trades
+                   WHERE exit_price IS NOT NULL AND timestamp >= ?""",
+                (cutoff_24h,),
+            ).fetchone()
+
+            wins = sc["wins"] or 0
+            losses = sc["losses"] or 0
+            total_pnl = sc["total_pnl"] or 0
+            avg_win = sc["avg_win"] or 0
+            avg_loss = sc["avg_loss"] or 0
+            payoff = abs(avg_win / avg_loss) if avg_loss else 0
+            wr = wins / (wins + losses) if (wins + losses) > 0 else 0
+
+            # Cumulative PnL series
+            pnl_rows = conn.execute(
+                """SELECT pnl_dollars FROM trades
+                   WHERE exit_price IS NOT NULL
+                   ORDER BY id ASC"""
+            ).fetchall()
+            cumulative = []
+            running = 0.0
+            peak = 0.0
+            max_dd = 0.0
+            for r in pnl_rows:
+                running += r["pnl_dollars"] or 0
+                cumulative.append(round(running, 2))
+                if running > peak:
+                    peak = running
+                dd = peak - running
+                if dd > max_dd:
+                    max_dd = dd
+
+            # Per-instrument breakdown
+            inst_rows = conn.execute(
+                """SELECT instrument,
+                    COUNT(*) as total,
+                    SUM(CASE WHEN pnl_dollars > 0 THEN 1 ELSE 0 END) as wins,
+                    SUM(pnl_dollars) as pnl
+                   FROM trades
+                   WHERE exit_price IS NOT NULL
+                   GROUP BY instrument
+                   ORDER BY SUM(pnl_dollars) DESC"""
+            ).fetchall()
+            instruments = [
+                {
+                    "instrument": r["instrument"],
+                    "trades": r["total"],
+                    "wins": r["wins"],
+                    "wr": round(r["wins"] / r["total"] * 100, 1) if r["total"] > 0 else 0,
+                    "pnl": round(r["pnl"] or 0, 2),
+                }
+                for r in inst_rows
+            ]
+
+            conn.close()
+
+            scorecard = {
+                "trades": wins + losses,
+                "wins": wins,
+                "losses": losses,
+                "total_pnl": round(total_pnl, 2),
+                "win_rate": round(wr * 100, 1),
+                "avg_win": round(avg_win, 2),
+                "avg_loss": round(avg_loss, 2),
+                "payoff_ratio": round(payoff, 2),
+                "best_trade": round(sc["best"] or 0, 2),
+                "worst_trade": round(sc["worst"] or 0, 2),
+                "max_drawdown": round(max_dd, 2),
+                "peak_pnl": round(peak, 2),
+                "current_dd": round(peak - running, 2),
+                "instruments": instruments,
+            }
+
+            return {"trades": trades, "scorecard": scorecard, "pnl_series": cumulative}
+        except Exception as e:
+            logger.debug("CME data poll failed: %s", e)
+            return {"trades": [], "scorecard": {}, "pnl_series": [], "error": str(e)}
+
+    def poll_cme_positions(self) -> List[Dict]:
+        """Read CME positions.json. Call from worker thread."""
+        try:
+            if not CME_POSITIONS_PATH.exists():
+                return []
+            with open(CME_POSITIONS_PATH) as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                return data
+            return []
+        except Exception:
+            return []
+
+    def poll_bot_status(self) -> Dict[str, bool]:
+        """Check if trading bots are running. Call from worker thread."""
+        import subprocess
+        result = {}
+        checks = {
+            "CME": "discord_bot.runner",
+            "HL": "hyperliquid",
+            "POLY": "polymarket",
+        }
+        for name, pattern in checks.items():
+            try:
+                out = subprocess.run(
+                    ["pgrep", "-f", pattern],
+                    capture_output=True, text=True, timeout=2,
+                )
+                result[name] = out.returncode == 0
+            except Exception:
+                result[name] = False
+        return result
+
+    def poll_unified_portfolio(self) -> Dict[str, Any]:
+        """Aggregate equity and P&L across all platforms."""
+        cme = self.poll_cme_trades()
+        cme_sc = cme.get("scorecard", {})
+        cme_positions = self.poll_cme_positions()
+
+        hl = self.poll_hl_data()
+
+        poly = self.poll_db()
+        poly_sc = poly.get("scorecard", {})
+        poly_positions = self.poll_positions()
+
+        return {
+            "cme": {
+                "equity": 50000 + cme_sc.get("total_pnl", 0),
+                "pnl_24h": cme_sc.get("total_pnl", 0),
+                "positions": len(cme_positions),
+                "trades": cme_sc.get("trades", 0),
+                "win_rate": cme_sc.get("win_rate", 0),
+                "pf": cme_sc.get("payoff_ratio", 0),
+            },
+            "hl": {
+                "equity": hl.get("equity", 0) if hl else 0,
+                "pnl_24h": hl.get("unrealized_pnl", 0) if hl else 0,
+                "positions": hl.get("position_count", 0) if hl else 0,
+                "leverage": hl.get("leverage", 0) if hl else 0,
+            },
+            "poly": {
+                "equity": poly_sc.get("total_pnl", 0),
+                "pnl_24h": poly_sc.get("total_pnl", 0),
+                "positions": len(poly_positions),
+                "trades": poly_sc.get("trades", 0),
+                "win_rate": poly_sc.get("win_rate", 0),
+            },
+            "bots": self.poll_bot_status(),
+        }
+
+    def poll_strategies(self) -> list:
+        """Compute per-strategy stats with decay detection. Call from worker thread."""
+        from monitoring.tui.strategy_decay import compute_all_strategies
+        return compute_all_strategies()

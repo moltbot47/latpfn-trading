@@ -49,6 +49,7 @@ class ApexCompliance:
         self.trailing_drawdown_amount = self.apex_cfg.get("max_total_drawdown_usd", 2500)
         self.profit_target = self.apex_cfg.get("profit_target_usd", 3000)
         self.profit_target_balance = self.starting_balance + self.profit_target
+        self.drawdown_type = self.apex_cfg.get("drawdown_type", "intraday")  # "eod" or "intraday"
 
         # Trailing drawdown state
         self._highest_balance: float = self.starting_balance
@@ -141,11 +142,43 @@ class ApexCompliance:
         Update trailing drawdown based on current balance (including unrealized P&L).
 
         Call this every cycle with the latest account balance.
-        The drawdown floor trails the highest balance seen, minus $2,500.
-        Once the floor reaches the profit target balance ($53,000), it locks.
+
+        For INTRADAY trail: floor trails the highest balance in real-time.
+        For EOD trail: floor only trails at end-of-day (call update_eod_balance()
+        at session close). Intraday calls still check for breach but don't trail.
         """
-        if current_balance > self._highest_balance:
-            self._highest_balance = current_balance
+        # For EOD trail, don't trail the floor intraday — only check for breach
+        if self.drawdown_type == "eod":
+            # Still persist for status display, but don't move the floor
+            return self.get_drawdown_status(current_balance)
+
+        # Intraday trail: move floor on every new high
+        self._trail_floor(current_balance)
+
+        # Persist drawdown state after every balance update
+        self.save_drawdown_state()
+
+        return self.get_drawdown_status(current_balance)
+
+    def update_eod_balance(self, closing_balance: float):
+        """
+        Update trailing drawdown at end of day (for EOD trail accounts).
+
+        Call this once at session close (flatten time) with the closing balance.
+        This is the only time the floor moves for EOD trail accounts.
+        """
+        self._trail_floor(closing_balance)
+        self.save_drawdown_state()
+        logger.info(
+            "EOD drawdown update: balance=$%,.2f, highest=$%,.2f, floor=$%,.2f",
+            closing_balance, self._highest_balance, self._drawdown_floor,
+        )
+        return self.get_drawdown_status(closing_balance)
+
+    def _trail_floor(self, balance: float):
+        """Move the trailing drawdown floor based on a new balance high."""
+        if balance > self._highest_balance:
+            self._highest_balance = balance
 
             if not self._floor_locked:
                 new_floor = self._highest_balance - self.trailing_drawdown_amount
@@ -159,11 +192,6 @@ class ApexCompliance:
                     )
                 else:
                     self._drawdown_floor = new_floor
-
-        # Persist drawdown state after every balance update
-        self.save_drawdown_state()
-
-        return self.get_drawdown_status(current_balance)
 
     def get_drawdown_status(self, current_balance: float) -> dict:
         """Return current drawdown status for display/alerting."""

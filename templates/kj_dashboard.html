@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KJ Strategy Dashboard</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --card2: #1c2129; --border: #30363d;
+    --text: #c9d1d9; --muted: #8b949e; --accent: #58a6ff;
+    --green: #3fb950; --red: #f85149; --yellow: #d29922;
+    --purple: #bc8cff; --cyan: #39d5ff; --orange: #f0883e;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, 'SF Mono', 'Fira Code', monospace; font-size: 13px; }
+
+  /* Header */
+  .header { background: var(--card); border-bottom: 1px solid var(--border); padding: 10px 24px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+  .header h1 { font-size: 15px; color: var(--accent); font-weight: 600; }
+  .header .status { display: flex; align-items: center; gap: 12px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot.alive { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .dot.dead { background: var(--red); box-shadow: 0 0 6px var(--red); }
+
+  /* Tabs */
+  .tabs { background: var(--card); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; gap: 0; overflow-x: auto; }
+  .tab { padding: 10px 20px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; font-size: 12px; font-weight: 500; white-space: nowrap; transition: all 0.2s; }
+  .tab:hover { color: var(--text); background: rgba(88,166,255,0.05); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Layout */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; padding: 12px 24px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .card h2 { font-size: 11px; text-transform: uppercase; color: var(--muted); letter-spacing: 1px; margin-bottom: 12px; }
+  .metric { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid var(--border); }
+  .metric:last-child { border-bottom: none; }
+  .metric .label { color: var(--muted); }
+  .metric .value { font-weight: 600; }
+  .positive { color: var(--green); }
+  .negative { color: var(--red); }
+  .warning { color: var(--yellow); }
+  .neutral { color: var(--muted); }
+  .wide { grid-column: 1 / -1; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; color: var(--muted); font-weight: 500; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  tr:hover { background: rgba(88,166,255,0.05); }
+  tr.clickable { cursor: pointer; }
+
+  /* Badges */
+  .badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .badge.long { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge.short { background: rgba(248,81,73,0.15); color: var(--red); }
+  .badge.textbook { background: rgba(255,215,0,0.15); color: #ffd700; }
+  .badge.regular { background: rgba(139,148,158,0.1); color: var(--muted); }
+  .badge.win { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge.loss { background: rgba(248,81,73,0.15); color: var(--red); }
+  .badge.timeout { background: rgba(139,148,158,0.1); color: var(--muted); }
+  .badge.pending { background: rgba(88,166,255,0.1); color: var(--accent); }
+
+  /* Gauge */
+  .gauge-container { text-align: center; padding: 8px 0; }
+  .gauge-bar { height: 20px; background: var(--border); border-radius: 10px; overflow: hidden; position: relative; margin: 8px 0; }
+  .gauge-fill { height: 100%; border-radius: 10px; transition: width 0.5s; position: relative; }
+  .gauge-label { font-size: 11px; color: var(--muted); }
+  .gauge-value { font-size: 20px; font-weight: 700; margin: 4px 0; }
+  .gauge-sublabel { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* Risk meters (reused for score bars) */
+  .score-meter { margin: 8px 0; }
+  .score-meter .sm-header { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .score-meter .sm-bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .score-meter .sm-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+
+  /* Buttons */
+  .btn { padding: 8px 16px; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #79b8ff; }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-sm { padding: 4px 10px; font-size: 11px; }
+
+  /* Footer */
+  .footer { text-align: center; padding: 8px; color: var(--muted); font-size: 11px; }
+
+  @media (max-width: 768px) {
+    .grid { grid-template-columns: 1fr; padding: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>KJ Strategy Dashboard</h1>
+  <div class="status">
+    <span style="color:var(--muted);font-size:11px;">Last scan: {{ last_scan }}</span>
+    <span class="dot {% if scanning %}dead{% else %}alive{% endif %}"></span>
+    <button class="btn btn-primary btn-sm" id="rescanBtn" onclick="rescan()" {% if scanning %}disabled{% endif %}>
+      {% if scanning %}Scanning...{% else %}Rescan{% endif %}
+    </button>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="overview">Overview</div>
+  <div class="tab" data-tab="setups">All Setups</div>
+  <div class="tab" data-tab="instruments">By Instrument</div>
+</div>
+
+<!-- ═══════════════ OVERVIEW TAB ═══════════════ -->
+<div class="tab-panel active" id="tab-overview">
+  <div class="grid">
+
+    <!-- Scan Summary -->
+    <div class="card">
+      <h2>Scan Summary</h2>
+      <div class="gauge-container">
+        <div class="gauge-value" style="color:var(--accent);">{{ total }}</div>
+        <div class="gauge-label">Total Setups Found</div>
+        <div class="gauge-bar">
+          <div class="gauge-fill" style="width:{% if total > 0 %}{{ (textbook|length / total * 100)|int }}{% else %}0{% endif %}%;background:#ffd700;"></div>
+        </div>
+        <div class="gauge-sublabel">{{ textbook|length }} textbook / {{ regular|length }} regular</div>
+      </div>
+    </div>
+
+    <!-- Performance -->
+    <div class="card">
+      <h2>Outcome Summary</h2>
+      <div class="metric"><span class="label">Total Setups</span><span class="value">{{ total }}</span></div>
+      <div class="metric"><span class="label">Textbook (75+)</span><span class="value" style="color:#ffd700;">{{ textbook|length }}</span></div>
+      <div class="metric"><span class="label">Wins</span><span class="value positive">{{ wins }}</span></div>
+      <div class="metric"><span class="label">Losses</span><span class="value negative">{{ losses }}</span></div>
+      <div class="metric"><span class="label">Win Rate</span><span class="value" style="color:var(--cyan);">{{ win_rate }}</span></div>
+    </div>
+
+    <!-- Instrument Breakdown -->
+    <div class="card">
+      <h2>Instrument Breakdown</h2>
+      <table>
+        <thead><tr><th>Instrument</th><th>Setups</th><th>Textbook</th><th>Wins</th><th>Losses</th></tr></thead>
+        <tbody>
+          {% for inst in instruments %}
+          {% set inst_setups = [] %}
+          {% set ns = namespace(total=0, tb=0, w=0, l=0) %}
+          {% for s in textbook + regular %}
+            {% if s.instrument == inst %}
+              {% set ns.total = ns.total + 1 %}
+              {% if s.classification == 'textbook' %}{% set ns.tb = ns.tb + 1 %}{% endif %}
+              {% if s.outcome == 'win' %}{% set ns.w = ns.w + 1 %}{% endif %}
+              {% if s.outcome == 'loss' %}{% set ns.l = ns.l + 1 %}{% endif %}
+            {% endif %}
+          {% endfor %}
+          <tr>
+            <td style="font-weight:600;">{{ inst }}</td>
+            <td>{{ ns.total }}</td>
+            <td style="color:#ffd700;">{{ ns.tb }}</td>
+            <td class="positive">{{ ns.w }}</td>
+            <td class="negative">{{ ns.l }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Score Distribution -->
+    <div class="card">
+      <h2>Score Distribution</h2>
+      {% set ns = namespace(s90=0, s80=0, s70=0, s60=0, slo=0) %}
+      {% for s in textbook + regular %}
+        {% if s.score >= 90 %}{% set ns.s90 = ns.s90 + 1 %}
+        {% elif s.score >= 80 %}{% set ns.s80 = ns.s80 + 1 %}
+        {% elif s.score >= 70 %}{% set ns.s70 = ns.s70 + 1 %}
+        {% elif s.score >= 60 %}{% set ns.s60 = ns.s60 + 1 %}
+        {% else %}{% set ns.slo = ns.slo + 1 %}{% endif %}
+      {% endfor %}
+      <div class="score-meter">
+        <div class="sm-header"><span class="label">90-100 (Elite)</span><span class="value" style="color:#ffd700;">{{ ns.s90 }}</span></div>
+        <div class="sm-bar"><div class="sm-fill" style="width:{% if total > 0 %}{{ (ns.s90 / total * 100)|int }}{% else %}0{% endif %}%;background:#ffd700;"></div></div>
+      </div>
+      <div class="score-meter">
+        <div class="sm-header"><span class="label">80-89 (Textbook)</span><span class="value positive">{{ ns.s80 }}</span></div>
+        <div class="sm-bar"><div class="sm-fill" style="width:{% if total > 0 %}{{ (ns.s80 / total * 100)|int }}{% else %}0{% endif %}%;background:var(--green);"></div></div>
+      </div>
+      <div class="score-meter">
+        <div class="sm-header"><span class="label">70-79 (Solid)</span><span class="value" style="color:var(--cyan);">{{ ns.s70 }}</span></div>
+        <div class="sm-bar"><div class="sm-fill" style="width:{% if total > 0 %}{{ (ns.s70 / total * 100)|int }}{% else %}0{% endif %}%;background:var(--cyan);"></div></div>
+      </div>
+      <div class="score-meter">
+        <div class="sm-header"><span class="label">60-69 (Regular)</span><span class="value warning">{{ ns.s60 }}</span></div>
+        <div class="sm-bar"><div class="sm-fill" style="width:{% if total > 0 %}{{ (ns.s60 / total * 100)|int }}{% else %}0{% endif %}%;background:var(--yellow);"></div></div>
+      </div>
+      <div class="score-meter">
+        <div class="sm-header"><span class="label">&lt;60 (Weak)</span><span class="value neutral">{{ ns.slo }}</span></div>
+        <div class="sm-bar"><div class="sm-fill" style="width:{% if total > 0 %}{{ (ns.slo / total * 100)|int }}{% else %}0{% endif %}%;background:var(--muted);"></div></div>
+      </div>
+    </div>
+
+    <!-- Textbook Setups Table -->
+    <div class="card wide">
+      <h2>Textbook Setups ({{ textbook|length }})</h2>
+      {% if textbook %}
+      <table>
+        <thead><tr><th>Instrument</th><th>Direction</th><th>Pattern</th><th>Fib</th><th>Entry</th><th>SL</th><th>TP</th><th>R:R</th><th>Score</th><th>Outcome</th><th>Time</th></tr></thead>
+        <tbody>
+          {% for s in textbook %}
+          <tr class="clickable" onclick="window.open('/chart/{{ s.setup_id }}','_blank')">
+            <td style="font-weight:600;">{{ s.instrument }}</td>
+            <td><span class="badge {% if s.direction == 'bullish' %}long{% else %}short{% endif %}">{{ s.direction }}</span></td>
+            <td>{{ s.pattern }}</td>
+            <td>{{ s.fib_level }}%</td>
+            <td>{{ s.entry_price }}</td>
+            <td class="negative">{{ s.stop_loss }}</td>
+            <td class="positive">{{ s.take_profit }}</td>
+            <td style="font-weight:600;color:var(--green);">{{ s.rr }}:1</td>
+            <td><span class="badge textbook">{{ s.score }}</span></td>
+            <td><span class="badge {{ s.outcome }}">{{ s.outcome }} {{ s.actual_rr }}</span></td>
+            <td style="color:var(--muted);">{{ s.entry_time }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div style="text-align:center;padding:20px;color:var(--muted);">No textbook setups found in current scan window.</div>
+      {% endif %}
+    </div>
+
+    <!-- Recent Regular Setups -->
+    <div class="card wide">
+      <h2>Regular Setups ({{ regular|length }})</h2>
+      {% if regular %}
+      <table>
+        <thead><tr><th>Instrument</th><th>Direction</th><th>Pattern</th><th>Fib</th><th>Entry</th><th>SL</th><th>TP</th><th>R:R</th><th>Score</th><th>Outcome</th><th>Time</th></tr></thead>
+        <tbody>
+          {% for s in regular %}
+          <tr class="clickable" onclick="window.open('/chart/{{ s.setup_id }}','_blank')">
+            <td style="font-weight:600;">{{ s.instrument }}</td>
+            <td><span class="badge {% if s.direction == 'bullish' %}long{% else %}short{% endif %}">{{ s.direction }}</span></td>
+            <td>{{ s.pattern }}</td>
+            <td>{{ s.fib_level }}%</td>
+            <td>{{ s.entry_price }}</td>
+            <td class="negative">{{ s.stop_loss }}</td>
+            <td class="positive">{{ s.take_profit }}</td>
+            <td style="font-weight:600;">{{ s.rr }}:1</td>
+            <td><span class="badge regular">{{ s.score }}</span></td>
+            <td><span class="badge {{ s.outcome }}">{{ s.outcome }} {{ s.actual_rr }}</span></td>
+            <td style="color:var(--muted);">{{ s.entry_time }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div style="text-align:center;padding:20px;color:var(--muted);">No regular setups found.</div>
+      {% endif %}
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════ ALL SETUPS TAB ═══════════════ -->
+<div class="tab-panel" id="tab-setups">
+  <div class="grid">
+    <div class="card wide">
+      <h2>All Setups — Sorted by Score ({{ total }})</h2>
+      <div style="max-height:600px;overflow-y:auto;">
+      <table>
+        <thead><tr><th>Instrument</th><th>Direction</th><th>Pattern</th><th>Confidence</th><th>Fib</th><th>Entry</th><th>SL</th><th>TP</th><th>R:R</th><th>Score</th><th>Class</th><th>Outcome</th><th>Time</th></tr></thead>
+        <tbody>
+          {% for s in textbook + regular %}
+          <tr class="clickable" onclick="window.open('/chart/{{ s.setup_id }}','_blank')">
+            <td style="font-weight:600;">{{ s.instrument }}</td>
+            <td><span class="badge {% if s.direction == 'bullish' %}long{% else %}short{% endif %}">{{ s.direction }}</span></td>
+            <td>{{ s.pattern }}</td>
+            <td>{{ s.pattern_confidence }}</td>
+            <td>{{ s.fib_level }}%</td>
+            <td>{{ s.entry_price }}</td>
+            <td class="negative">{{ s.stop_loss }}</td>
+            <td class="positive">{{ s.take_profit }}</td>
+            <td style="font-weight:600;color:var(--green);">{{ s.rr }}:1</td>
+            <td style="font-weight:700;{% if s.score >= 75 %}color:#ffd700;{% elif s.score >= 65 %}color:var(--green);{% else %}color:var(--muted);{% endif %}">{{ s.score }}</td>
+            <td><span class="badge {{ s.classification }}">{{ s.classification }}</span></td>
+            <td><span class="badge {{ s.outcome }}">{{ s.outcome }} {{ s.actual_rr }}</span></td>
+            <td style="color:var(--muted);">{{ s.entry_time }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ BY INSTRUMENT TAB ═══════════════ -->
+<div class="tab-panel" id="tab-instruments">
+  <div class="grid">
+    {% for inst in instruments %}
+    <div class="card wide">
+      <h2>{{ inst }} Setups</h2>
+      {% set ns = namespace(found=false) %}
+      {% for s in textbook + regular %}
+        {% if s.instrument == inst %}{% set ns.found = true %}{% endif %}
+      {% endfor %}
+      {% if ns.found %}
+      <table>
+        <thead><tr><th>Direction</th><th>Pattern</th><th>Fib</th><th>Entry</th><th>SL</th><th>TP</th><th>R:R</th><th>Score</th><th>Class</th><th>Outcome</th><th>Time</th></tr></thead>
+        <tbody>
+          {% for s in textbook + regular %}
+          {% if s.instrument == inst %}
+          <tr class="clickable" onclick="window.open('/chart/{{ s.setup_id }}','_blank')">
+            <td><span class="badge {% if s.direction == 'bullish' %}long{% else %}short{% endif %}">{{ s.direction }}</span></td>
+            <td>{{ s.pattern }}</td>
+            <td>{{ s.fib_level }}%</td>
+            <td>{{ s.entry_price }}</td>
+            <td class="negative">{{ s.stop_loss }}</td>
+            <td class="positive">{{ s.take_profit }}</td>
+            <td style="font-weight:600;color:var(--green);">{{ s.rr }}:1</td>
+            <td style="font-weight:700;{% if s.score >= 75 %}color:#ffd700;{% elif s.score >= 65 %}color:var(--green);{% else %}color:var(--muted);{% endif %}">{{ s.score }}</td>
+            <td><span class="badge {{ s.classification }}">{{ s.classification }}</span></td>
+            <td><span class="badge {{ s.outcome }}">{{ s.outcome }} {{ s.actual_rr }}</span></td>
+            <td style="color:var(--muted);">{{ s.entry_time }}</td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div style="text-align:center;padding:16px;color:var(--muted);">No setups found for {{ inst }}.</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="footer">Data delayed ~5 min (Yahoo Finance) | KJ Strategy Scanner | <a href="/api/setups" style="color:var(--accent);text-decoration:none;">API</a></div>
+
+<script>
+// ── Tabs ─────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+// ── Rescan ───────────────────────────────────────────────────────
+async function rescan() {
+  const btn = document.getElementById('rescanBtn');
+  btn.disabled = true;
+  btn.textContent = 'Scanning...';
+  try {
+    const res = await fetch('/api/rescan', { method: 'POST' });
+    const data = await res.json();
+    if (data.status === 'started') {
+      const poll = setInterval(async () => {
+        const r = await fetch('/api/setups');
+        const d = await r.json();
+        if (!d.scanning) {
+          clearInterval(poll);
+          location.reload();
+        }
+      }, 3000);
+    }
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Rescan';
+  }
+}
+</script>
+
+</body>
+</html>

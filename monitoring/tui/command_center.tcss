@@ -1,0 +1,342 @@
+Screen {
+    layout: vertical;
+    background: $surface;
+}
+
+#global-header {
+    dock: top;
+    height: 3;
+    background: $primary-background;
+    color: $text;
+    content-align: center middle;
+    text-style: bold;
+    border-bottom: heavy $primary;
+    padding: 0 1;
+}
+
+#main-tabs {
+    height: 1fr;
+}
+
+ContentSwitcher {
+    height: 1fr;
+}
+
+TabPane {
+    padding: 0;
+}
+
+/* ── Overview Tab ── */
+
+#overview-cards {
+    layout: horizontal;
+    height: 8;
+    margin: 0 0 0 0;
+}
+
+.platform-card {
+    width: 1fr;
+    height: 100%;
+    border: solid $accent;
+    padding: 0 1;
+    margin: 0 1 0 0;
+}
+
+.platform-card:last-of-type {
+    margin: 0;
+}
+
+#overview-body {
+    layout: horizontal;
+    height: 1fr;
+}
+
+#unified-trades {
+    width: 65%;
+    border: solid $warning;
+    padding: 0;
+}
+
+#risk-dashboard {
+    width: 35%;
+    border: solid $error;
+    padding: 0 1;
+    overflow-y: auto;
+}
+
+/* ── Platform Tab Layout (shared by CME, HL, Poly) ── */
+
+.platform-tab {
+    layout: horizontal;
+    height: 1fr;
+}
+
+.platform-left {
+    width: 55%;
+    layout: vertical;
+}
+
+.platform-right {
+    width: 45%;
+    layout: vertical;
+}
+
+.positions-table {
+    height: 40%;
+    border: solid $warning;
+}
+
+.scorecard-panel {
+    height: 30%;
+    border: solid $success;
+    padding: 0 1;
+    overflow-y: auto;
+}
+
+.bottom-row {
+    layout: horizontal;
+    height: 30%;
+}
+
+.regime-panel {
+    width: 50%;
+    border: solid cyan;
+    padding: 0 1;
+    overflow-y: auto;
+}
+
+.chart-panel {
+    width: 50%;
+    border: solid $error;
+    padding: 0 1;
+}
+
+.trade-feed {
+    height: 100%;
+    border: solid $accent;
+    padding: 0;
+}
+
+.trade-feed:focus {
+    border: double $accent;
+}
+
+/* ── DataTable ── */
+
+DataTable {
+    height: 1fr;
+}
+
+DataTable > .datatable--cursor {
+    background: $accent 30%;
+}
+
+DataTable > .datatable--header {
+    text-style: bold;
+    background: $primary-background;
+}
+
+/* ── Strategies Tab ── */
+
+#strategies-body {
+    layout: horizontal;
+    height: 1fr;
+}
+
+#strategies-table {
+    width: 55%;
+    border: solid $warning;
+}
+
+#strategies-detail {
+    width: 45%;
+    layout: vertical;
+}
+
+#decay-panel {
+    height: 40%;
+    border: solid $error;
+    padding: 0 1;
+    overflow-y: auto;
+}
+
+#strategy-detail {
+    height: 60%;
+    border: solid $success;
+    padding: 0 1;
+    overflow-y: auto;
+}
+
+/* ── Backtest Tab ── */
+
+#backtest-config {
+    height: 8;
+    layout: horizontal;
+    padding: 0 1;
+    border: solid $accent;
+}
+
+#backtest-config Select {
+    width: 20%;
+    margin: 0 1 0 0;
+}
+
+#backtest-config Input {
+    width: 15%;
+    margin: 0 1 0 0;
+}
+
+#backtest-buttons {
+    layout: horizontal;
+    height: 3;
+    padding: 0 1;
+}
+
+#backtest-buttons Button {
+    margin: 0 1 0 0;
+}
+
+#backtest-results {
+    height: 1fr;
+    layout: horizontal;
+}
+
+#backtest-metrics {
+    width: 50%;
+    border: solid $success;
+    padding: 0 1;
+    overflow-y: auto;
+}
+
+#backtest-log {
+    width: 50%;
+    border: solid $accent;
+}
+
+/* ── Modal Screens ── */
+
+PositionDetailScreen {
+    align: center middle;
+}
+
+#position-modal {
+    width: 60;
+    height: auto;
+    max-height: 25;
+    border: thick $accent;
+    background: $surface;
+    padding: 1 2;
+}
+
+#position-modal-buttons {
+    layout: horizontal;
+    height: 3;
+    margin-top: 1;
+}
+
+#position-modal-buttons Button {
+    margin: 0 1 0 0;
+}
+
+ConfirmScreen {
+    align: center middle;
+}
+
+#confirm-dialog {
+    width: 40;
+    height: auto;
+    max-height: 10;
+    border: thick $error;
+    background: $surface;
+    padding: 1 2;
+}
+
+#confirm-buttons {
+    layout: horizontal;
+    height: 3;
+    margin-top: 1;
+}
+
+#confirm-buttons Button {
+    margin: 0 1 0 0;
+}
+
+/* ── Alerts Tab ── */
+
+#alerts-header {
+    layout: horizontal;
+    height: 3;
+    padding: 0 1;
+}
+
+#alerts-summary {
+    width: 1fr;
+    border: solid $warning;
+    padding: 0 1;
+}
+
+#ack-all-btn {
+    width: 12;
+    margin: 0 0 0 1;
+}
+
+#alerts-table {
+    height: 50%;
+    border: solid $error;
+}
+
+#alert-detail {
+    height: 1fr;
+    border: solid $success;
+    padding: 0 1;
+    overflow-y: auto;
+}
+
+/* ── Risk Tab ── */
+
+#risk-body {
+    layout: horizontal;
+    height: 1fr;
+}
+
+#risk-left {
+    width: 50%;
+    layout: vertical;
+}
+
+#risk-right {
+    width: 50%;
+    layout: vertical;
+}
+
+#drawdown-gauge {
+    height: 50%;
+    border: solid $error;
+    padding: 0 1;
+    overflow-y: auto;
+}
+
+#daily-limits {
+    height: 50%;
+    border: solid $warning;
+    padding: 0 1;
+    overflow-y: auto;
+}
+
+#consistency-panel {
+    height: 50%;
+    border: solid cyan;
+    padding: 0 1;
+    overflow-y: auto;
+}
+
+#position-risk {
+    height: 50%;
+    border: solid $success;
+    padding: 0 1;
+    overflow-y: auto;
+}
+
+Footer {
+    background: $primary-background;
+}

@@ -23,6 +23,10 @@ python main.py                    # Trading system without Discord
 python main.py --dry-run          # Predictions only, no orders
 python scripts/backtest.py        # Historical backtest
 python scripts/dashboard.py       # Web dashboard (port 5050)
+
+# Trend Follower (standalone strategy)
+python -m strategies.trend_follower.runner           # Live execution
+python -m strategies.trend_follower.runner --dry-run  # Dry run (no orders)
 ```
 
 ## Key Architecture
@@ -40,6 +44,14 @@ main.py → orchestrator/main_loop.py (TradingSystem)
   → execution/order_manager.py (position tracking + persistence)
   → monitoring/trade_logger.py (SQLite trade/prediction logging)
   → discord_bot/bot.py (signal embeds, /status, /close, /closeall)
+
+strategies/trend_follower/runner.py (TrendFollowerRunner - standalone)
+  → strategies/trend_follower/price_feed.py (yfinance batch polling, 5s snapshots)
+  → strategies/trend_follower/strategy.py (Donchian breakout + ADX/EMA filters)
+  → strategies/trend_follower/trail_manager.py (ATR chandelier trailing stops)
+  → execution/traderspost_client.py (TradersPost webhooks - shared)
+  → risk/apex_compliance.py (Apex prop firm rules - shared)
+  → polymarket/platform_emitter.py (agent platform events - shared)
 ```
 
 ## Config
@@ -94,9 +106,9 @@ Disabled: MET (PF 0.29), 10Y (PF 0.00), M2K (no edge), MGC (Apex metals halt), M
 - Position sizing: drawdown-aware (scales with remaining cushion)
 
 ## Apex Prop Firm Rules
-- **Accounts:** APEX4406280000018 (Tradovate 5) + APEX4406280000019 (Tradovate 6) — fresh $50k evals
-- **Previous accounts:** APEX4406280000016 + 17 — blown 02/24 (counter-trend longs in gate=soft mode)
-- **Trailing drawdown:** $2,500 (floor trails up with new highs, locks at $50k)
+- **Active account:** APEX4406280000020 (Tradovate 42664428) — $50k EOD Trail eval
+- **Previous accounts:** APEX-18 + 19 (evals), APEX-16 + 17 — blown 02/24 (counter-trend longs in gate=soft mode)
+- **Trailing drawdown:** $2,000 EOD Trail (floor only moves at session close, not intraday)
 - **Daily loss limit:** $1,000 (conservative, system enforced)
 - **Profit target:** $3,000 ($53k balance)
 - **Consistency rule:** No single day > 30% of total profit
@@ -119,6 +131,19 @@ Disabled: MET (PF 0.29), 10Y (PF 0.00), M2K (no edge), MGC (Apex metals halt), M
 - Auth embedded in webhook URL — no separate API key needed
 - Rate limits: 60 requests/min, 500 requests/hour
 - Docs: https://docs.traderspost.io/docs/core-concepts/signals/webhooks
+
+## Trend Follower Strategy
+- **Type:** Donchian breakout trend-following with ATR trailing stops
+- **Entry:** Price breaks 20-period Donchian channel + ADX > 25 + EMA 50/200 alignment
+- **Exit:** 3x ATR chandelier trailing stop (follows best price, never retreats)
+- **Scale-out:** 50% at 1.5R, stop moves to breakeven for remainder
+- **Initial stop:** 2x ATR from entry
+- **Polling:** 5-second price polling for trail management, 5-min cycle for entry scanning
+- **Sizing:** 2% equity risk per trade, risk-based: (equity * 0.02) / (stop_dist * contract_size)
+- **Agent Platform:** Registered as `trend_follower_cme` (ID: 3a10a35b-043d-41ec-9a9e-e6dce4096c6c)
+- **API Key prefix:** ak_1b84aef65
+- **State file:** data/trend_positions.json
+- **Config section:** `trend_follower` in settings.yaml
 
 ## LaT-PFN Model
 - Cloned at `Lat-PFN/` subdirectory

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Launch the Turbo TUI dashboard. Run alongside the bot in a separate terminal."""
+"""Launch the Trading Command Center TUI. Run alongside the bot in a separate terminal."""
 
 import sys
 from pathlib import Path
@@ -12,8 +12,8 @@ sys.path.insert(0, str(project_root))
 from dotenv import load_dotenv
 load_dotenv(project_root / ".env")
 
-from monitoring.tui.app import TurboTUIApp
+from monitoring.tui.app import CommandCenter
 
 if __name__ == "__main__":
-    app = TurboTUIApp()
+    app = CommandCenter()
     app.run()
