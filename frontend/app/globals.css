@@ -1,0 +1,649 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Fonts loaded via next/font in layout.tsx */
+
+:root {
+  /* PostHog Warm Parchment palette */
+  --bg: #EEEFE9;
+  --bg-surface: #FDFDF8;
+  --bg-accent: #E5E7E0;
+  --bg-dark: #23251D;
+  --border: #BFC1B7;
+  --border-subtle: #D2D3CC;
+  --border-bold: #9EA096;
+  --text: #4D4F46;
+  --text-strong: #23251D;
+  --text-muted: #73756B;
+  --text-faint: #9EA096;
+
+  --orange: #EB9D2A;
+  --orange-shadow: #CD8407;
+  --orange-border: #B17816;
+  --orange-dim: rgba(235, 157, 42, 0.12);
+  --red: #F54E00;
+  --red-dim: rgba(245, 78, 0, 0.08);
+  --green: #388600;
+  --green-dim: rgba(56, 134, 0, 0.08);
+  --blue: #2F80FA;
+  --blue-dim: rgba(47, 128, 250, 0.08);
+
+  /* Keep TV vars for terminal page */
+  --tv-bg: #131722;
+  --tv-bg-secondary: #1E222D;
+  --tv-bg-tertiary: #2A2E39;
+  --tv-border: #363A45;
+  --tv-border-light: #434651;
+  --tv-text: #D1D4DC;
+  --tv-text-muted: #787B86;
+  --tv-text-dim: #5D606B;
+  --tv-accent: #2962FF;
+  --tv-accent-hover: #1E53E5;
+  --tv-green: #26A69A;
+  --tv-green-bg: rgba(38, 166, 154, 0.12);
+  --tv-red: #EF5350;
+  --tv-red-bg: rgba(239, 83, 80, 0.12);
+  --tv-yellow: #F7931A;
+  --tv-cyan: #00BCD4;
+  --tv-purple: #AB47BC;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ibm-plex), 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.5715;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Overflow hidden only on terminal layouts, not globally */
+.tui, .terminal-layout {
+  overflow: hidden;
+  height: 100vh;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-bold); }
+
+/* ===== LANDING PAGE ===== */
+.landing { overflow-y: auto; height: 100vh; background: var(--bg); }
+
+/* Hero dark section with background image */
+.hero-section {
+  position: relative;
+  background: var(--bg-dark);
+  overflow: hidden;
+}
+/* Hero background image */
+.hero-section::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url("/hero-bg.png") center 40% / 100% auto no-repeat;
+  opacity: 0.6;
+  z-index: 0;
+  pointer-events: none;
+}
+/* Subtle repeating pattern overlay */
+.hero-section .hero-pattern {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image: url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M12 8l-4 4 4 4M28 8l4 4-4 4' stroke='%23ffffff' stroke-width='0.8' fill='none' stroke-linecap='round' opacity='0.3'/%3E%3Ccircle cx='20' cy='20' r='0.8' fill='%23ffffff' opacity='0.2'/%3E%3C/svg%3E");
+  background-size: 40px 40px;
+}
+.hero-section::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 120px;
+  background: linear-gradient(to bottom, transparent, var(--bg));
+  z-index: 1;
+  pointer-events: none;
+}
+.hero-section > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* 3D Raised Buttons — PostHog signature */
+.btn-raised {
+  position: relative;
+  padding: 8px 18px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 0 var(--border);
+  transition: all 0.1s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+}
+.btn-raised:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 3px 0 var(--border);
+}
+.btn-raised:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+/* Orange CTA variant */
+.btn-raised.primary {
+  background: var(--orange);
+  color: white;
+  border-color: var(--orange-shadow);
+  box-shadow: 0 2px 0 var(--orange-shadow);
+  font-weight: 600;
+}
+.btn-raised.primary:hover {
+  box-shadow: 0 3px 0 var(--orange-shadow);
+  transform: translateY(-3px);
+}
+
+/* Dark CTA for hero section */
+.btn-hero {
+  padding: 12px 32px;
+  border: none;
+  border-radius: 10px;
+  background: var(--orange);
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transform: translateY(-2px);
+  box-shadow: 0 3px 0 var(--orange-shadow), 0 8px 24px rgba(235, 157, 42, 0.3);
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.btn-hero:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 4px 0 var(--orange-shadow), 0 12px 32px rgba(235, 157, 42, 0.4);
+}
+.btn-hero:active {
+  transform: translateY(0);
+  box-shadow: 0 0 0 var(--orange-shadow);
+}
+
+.btn-hero-ghost {
+  padding: 12px 28px;
+  border: 1.5px solid rgba(255,255,255,0.3);
+  border-radius: 10px;
+  background: transparent;
+  color: white;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.btn-hero-ghost:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.5);
+}
+
+/* PostHog cards */
+.ph-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 24px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.ph-card:hover {
+  border-color: var(--border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+/* KPI stat card */
+.stat-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+  transition: all 0.2s;
+}
+.stat-card:hover {
+  border-color: var(--border);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.kpi-value {
+  font-size: 30px;
+  font-weight: 800;
+  font-family: 'Source Code Pro', monospace;
+  color: var(--text-strong);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+/* Badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.badge-green { background: var(--green-dim); color: var(--green); border: 1px solid rgba(56,134,0,0.2); }
+.badge-orange { background: var(--orange-dim); color: var(--orange-border); border: 1px solid rgba(235,157,42,0.25); }
+
+/* Instrument pill — light theme */
+.instrument-pill {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 6px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: 'Source Code Pro', monospace;
+  color: var(--text-strong);
+  transition: all 0.15s;
+}
+.instrument-pill:hover {
+  border-color: var(--orange);
+  color: var(--orange-border);
+}
+
+/* Pulse dot */
+.pulse-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Section divider — orange */
+.section-divider {
+  width: 48px;
+  height: 3px;
+  background: var(--orange);
+  border-radius: 2px;
+  margin-bottom: 16px;
+}
+
+/* Step number */
+.step-num {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--orange);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 0 var(--orange-shadow);
+}
+
+/* ===== TERMINAL PAGE (keep dark theme) ===== */
+.terminal-layout {
+  background: var(--tv-bg);
+  color: var(--tv-text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', Roboto, Ubuntu, sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+  height: 100vh;
+}
+
+/* TV Panel system for terminal */
+.tv-panel {
+  background: var(--tv-bg-secondary);
+  border: 1px solid var(--tv-border);
+}
+.tv-panel-header {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--tv-border);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--tv-text-muted);
+  user-select: none;
+}
+
+.tv-btn {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all 0.1s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tv-btn-primary { background: var(--tv-accent); color: white; }
+.tv-btn-primary:hover { background: var(--tv-accent-hover); }
+.tv-btn-ghost { background: transparent; color: var(--tv-text-muted); border: 1px solid var(--tv-border); }
+.tv-btn-ghost:hover { background: var(--tv-bg-tertiary); color: var(--tv-text); }
+.tv-btn-buy { background: var(--tv-green); color: white; font-weight: 700; }
+.tv-btn-sell { background: var(--tv-red); color: white; font-weight: 700; }
+
+.tv-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.tv-table th { text-align: left; padding: 6px 8px; color: var(--tv-text-dim); font-weight: 500; font-size: 11px; border-bottom: 1px solid var(--tv-border); position: sticky; top: 0; background: var(--tv-bg-secondary); }
+.tv-table td { padding: 5px 8px; border-bottom: 1px solid rgba(54, 58, 69, 0.5); font-variant-numeric: tabular-nums; }
+.tv-table tr:hover { background: rgba(41, 98, 255, 0.06); }
+
+.tv-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--tv-border); }
+.tv-tab { padding: 8px 16px; font-size: 12px; font-weight: 500; color: var(--tv-text-muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s; }
+.tv-tab:hover { color: var(--tv-text); }
+.tv-tab-active { color: var(--tv-text); border-bottom-color: var(--tv-accent); }
+
+.text-green { color: var(--tv-green); }
+.text-red { color: var(--tv-red); }
+
+/* Missing TV component classes */
+.tv-metric {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  font-size: 12px;
+}
+.tv-metric-label { color: var(--tv-text-dim); font-size: 11px; }
+.tv-metric-value { font-weight: 600; font-variant-numeric: tabular-nums; font-family: 'Source Code Pro', monospace; }
+
+.tv-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.tv-badge-long { background: var(--tv-green-bg); color: var(--tv-green); }
+.tv-badge-short { background: var(--tv-red-bg); color: var(--tv-red); }
+
+/* ===== TERMINAL/TUI THEME ===== */
+/* JetBrains Mono loaded via next/font in layout.tsx */
+
+.tui {
+  --ansi-black: #0c0c0c;
+  --ansi-red: #c50f1f;
+  --ansi-green: #13a10e;
+  --ansi-yellow: #c19c00;
+  --ansi-blue: #0037da;
+  --ansi-magenta: #881798;
+  --ansi-cyan: #3a96dd;
+  --ansi-white: #cccccc;
+  --ansi-bright-black: #767676;
+  --ansi-bright-red: #e74856;
+  --ansi-bright-green: #16c60c;
+  --ansi-bright-yellow: #f9f1a5;
+  --ansi-bright-blue: #3b78ff;
+  --ansi-bright-magenta: #b4009e;
+  --ansi-bright-cyan: #61d6d6;
+  --ansi-bright-white: #f2f2f2;
+
+  background: var(--ansi-black);
+  color: var(--ansi-white);
+  font-family: var(--font-jetbrains), 'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-shadow: 0 0 2px rgba(204,204,204,0.1);
+}
+
+/* Scanline overlay */
+.tui::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 17px, rgba(0,0,0,0.03) 17px, rgba(0,0,0,0.03) 18px);
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* TUI Panel with box-drawing style border */
+.tui-panel {
+  border: 1px solid #767676;
+  background: #0c0c0c;
+  position: relative;
+}
+.tui-panel-title {
+  position: absolute;
+  top: -0.65em;
+  left: 16px;
+  background: #0c0c0c;
+  padding: 0 8px;
+  color: #61d6d6;
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* TUI Table */
+.tui-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.tui-table th {
+  color: #61d6d6;
+  font-weight: 700;
+  text-align: left;
+  padding: 2px 16px 2px 0;
+  border-bottom: 1px solid #767676;
+  font-size: 11px;
+}
+.tui-table td {
+  padding: 2px 16px 2px 0;
+  color: #cccccc;
+}
+.tui-table tr:hover td { background: rgba(255,255,255,0.03); }
+.tui-table tr:nth-child(even) td { background: rgba(255,255,255,0.015); }
+.tui-table .num { text-align: right; }
+
+/* TUI Tabs */
+.tui-tabs {
+  display: flex;
+  border-bottom: 1px solid #767676;
+}
+.tui-tab {
+  padding: 2px 16px;
+  color: #767676;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  font-size: 11px;
+  font-family: inherit;
+}
+.tui-tab:hover { color: #cccccc; }
+.tui-tab-active {
+  color: #61d6d6;
+  border-bottom-color: #61d6d6;
+}
+
+/* TUI Direction badges */
+.tui-long {
+  color: #16c60c;
+  font-weight: 700;
+}
+.tui-short {
+  color: #e74856;
+  font-weight: 700;
+}
+
+/* TUI Status row (htop-style) */
+.tui-row {
+  display: flex;
+  align-items: center;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre;
+}
+.tui-row-label {
+  color: #767676;
+  min-width: 12ch;
+}
+.tui-row-value {
+  color: #f2f2f2;
+  font-weight: 700;
+  min-width: 10ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* TUI progress bar tracks */
+.tui-bar-track {
+  flex: 1;
+  margin: 0 8px;
+  font-family: inherit;
+  font-size: 12px;
+  white-space: pre;
+  line-height: 1;
+}
+
+/* TUI Buttons [ bracketed ] */
+.tui-btn {
+  display: inline-block;
+  padding: 0;
+  background: none;
+  border: none;
+  color: #cccccc;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  text-shadow: 0 0 2px rgba(204,204,204,0.15);
+  line-height: 1.5;
+}
+.tui-btn::before { content: '[ '; }
+.tui-btn::after { content: ' ]'; }
+.tui-btn:hover {
+  color: #0c0c0c;
+  background: #cccccc;
+  text-shadow: none;
+}
+.tui-btn.primary {
+  color: #0c0c0c;
+  background: #61d6d6;
+  text-shadow: none;
+}
+.tui-btn.primary::before,
+.tui-btn.primary::after { color: #0c0c0c; }
+
+/* Vim-style status line */
+.tui-statusline {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 17px;
+  background: #cccccc;
+  color: #0c0c0c;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  z-index: 100;
+  font-family: 'JetBrains Mono', monospace;
+}
+.tui-statusline-mode {
+  background: #13a10e;
+  color: #0c0c0c;
+  padding: 0 8px;
+  font-weight: 700;
+}
+.tui-statusline-right {
+  margin-left: auto;
+  padding: 0 8px;
+}
+
+/* Blinking cursor */
+@keyframes blink-cursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.tui-cursor {
+  display: inline-block;
+  width: 0.6em;
+  height: 1.15em;
+  background: #cccccc;
+  animation: blink-cursor 1s step-end infinite;
+  vertical-align: text-bottom;
+}
+
+/* TUI Signal card */
+.tui-signal {
+  border: 1px solid #767676;
+  padding: 8px;
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+.tui-signal-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.tui-signal-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+.tui-signal-field label {
+  color: #767676;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.tui-signal-field span {
+  color: #f2f2f2;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tier colors */
+.tier-layup { color: #16c60c; }
+.tier-short_range { color: #3b78ff; }
+.tier-three_pointer { color: #c19c00; }
+.tier-free_throw { color: #61d6d6; }
+.tier-half_court { color: #e74856; }
+
+/* TUI responsive */
+.tui-show-mobile { display: none !important; }
+@media (max-width: 768px) {
+  .tui-hide-mobile { display: none !important; }
+  .tui-show-mobile { display: inline-block !important; }
+  .tui-mobile-stack { flex-direction: column !important; }
+  .tui-mobile-full { width: 100% !important; }
+  .tui { font-size: 11px; }
+  .tui-table { font-size: 11px; }
+  .tui-table th, .tui-table td { padding: 2px 8px 2px 0; }
+  .tui-statusline { font-size: 10px; }
+}
