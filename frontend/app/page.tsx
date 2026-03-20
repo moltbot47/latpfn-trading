@@ -7,6 +7,7 @@ import { useAccount, useReadContract, useWriteContract, useWaitForTransactionRec
 import { formatEther } from "viem";
 import { SIGNAL_ACCESS_ADDRESS, SIGNAL_ACCESS_ABI } from "@/lib/contract-wagmi";
 import { motion } from "framer-motion";
+import ParticleBackground from "@/components/ParticleBackground";
 
 const STATS = [
   { value: "56.7%", label: "Win Rate", color: "var(--green)" },
@@ -108,29 +109,30 @@ export default function Home() {
   const showWrongNetwork = isConnected && !isBase;
 
   return (
-    <div className="landing">
+    <div className="landing" style={{ background: "#0c0c0c" }}>
+      <ParticleBackground />
       {/* ===== NAV ===== */}
       <nav style={{
         height: 56, display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "0 32px", background: "var(--bg-surface)", borderBottom: "1px solid var(--border-subtle)",
-        position: "sticky", top: 0, zIndex: 50,
+        padding: "0 32px", background: "rgba(12,12,12,0.85)", borderBottom: "1px solid rgba(118,118,118,0.2)",
+        position: "sticky", top: 0, zIndex: 50, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div className="pulse-dot" />
-          <span style={{ fontWeight: 700, fontSize: 16, color: "var(--text-strong)" }}>LaT-PFN</span>
-          <span style={{ fontSize: 12, color: "var(--text-faint)" }}>Trading Terminal</span>
+          <span style={{ fontWeight: 700, fontSize: 16, color: "#f2f2f2" }}>LaT-PFN</span>
+          <span style={{ fontSize: 12, color: "#767676" }}>Trading Terminal</span>
         </div>
         {isConnected ? (
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "'Source Code Pro', monospace" }}>
+            <span style={{ fontSize: 12, color: "#767676", fontFamily: "'Source Code Pro', monospace" }}>
               {address ? `${address.slice(0, 6)}...${address.slice(-4)}` : ""}
             </span>
-            <button className="btn-raised" style={{ fontSize: 12, padding: "4px 12px" }} onClick={logout}>Sign Out</button>
+            <button className="btn-raised" style={{ fontSize: 12, padding: "4px 12px", background: "rgba(255,255,255,0.1)", color: "#f2f2f2", borderColor: "rgba(118,118,118,0.3)" }} onClick={logout}>Sign Out</button>
           </div>
         ) : authenticated && userLabel ? (
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 13, color: "var(--text-muted)" }}>{userLabel}</span>
-            <button className="btn-raised" style={{ fontSize: 12, padding: "4px 12px" }} onClick={logout}>Sign Out</button>
+            <span style={{ fontSize: 13, color: "#999" }}>{userLabel}</span>
+            <button className="btn-raised" style={{ fontSize: 12, padding: "4px 12px", background: "rgba(255,255,255,0.1)", color: "#f2f2f2", borderColor: "rgba(118,118,118,0.3)" }} onClick={logout}>Sign Out</button>
           </div>
         ) : (
           <button className="btn-raised primary" onClick={login}>Sign In</button>
@@ -185,9 +187,9 @@ export default function Home() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
               {STATS.map((s, i) => (
                 <motion.div key={s.label} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={i} variants={fadeUp}
-                  className="stat-card">
-                  <div className="kpi-value" style={{ color: s.color, marginBottom: 6 }}>{s.value}</div>
-                  <div style={{ fontSize: 11, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 600 }}>
+                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(118,118,118,0.15)", borderRadius: 10, padding: 20, textAlign: "center", backdropFilter: "blur(8px)" }}>
+                  <div className="kpi-value" style={{ color: s.color === "var(--green)" ? "#16c60c" : "#f2f2f2", marginBottom: 6 }}>{s.value}</div>
+                  <div style={{ fontSize: 11, color: "#767676", textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 600 }}>
                     {s.label}
                   </div>
                 </motion.div>
@@ -195,7 +197,7 @@ export default function Home() {
             </div>
             <div style={{ marginTop: 16, display: "flex", justifyContent: "center", gap: 8 }}>
               {["MNQ", "MYM", "MES", "MBT"].map((sym) => (
-                <span key={sym} className="instrument-pill">{sym}</span>
+                <span key={sym} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(118,118,118,0.2)", borderRadius: 6, padding: "6px 18px", fontSize: 13, fontWeight: 600, fontFamily: "'Source Code Pro', monospace", color: "#f2f2f2" }}>{sym}</span>
               ))}
             </div>
           </div>
@@ -204,7 +206,7 @@ export default function Home() {
           <div id="how-it-works" style={{ maxWidth: 640, margin: "72px auto 0", padding: "0 32px" }}>
             <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} custom={0} variants={fadeUp}>
               <div className="section-divider" />
-              <h2 style={{ fontSize: 24, fontWeight: 700, color: "var(--text-strong)", marginBottom: 24 }}>How It Works</h2>
+              <h2 style={{ fontSize: 24, fontWeight: 700, color: "#f2f2f2", marginBottom: 24 }}>How It Works</h2>
             </motion.div>
             {[
               { step: "1", title: "Sign In", desc: "Email, Google, Twitter, Apple — or connect MetaMask, Coinbase, 300+ wallets. We auto-create a wallet if you don't have one." },
@@ -213,11 +215,11 @@ export default function Home() {
               { step: "4", title: "Verify On-Chain", desc: "Every forecast hashed on Base before delivery. Check Basescan yourself — fully transparent." },
             ].map((item, i) => (
               <motion.div key={item.step} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={i + 1} variants={fadeUp}
-                className="ph-card" style={{ display: "flex", gap: 16, marginBottom: 12, cursor: "default" }}>
-                <div className="step-num">{item.step}</div>
+                style={{ display: "flex", gap: 16, marginBottom: 12, cursor: "default", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(118,118,118,0.15)", borderRadius: 10, padding: 24, backdropFilter: "blur(8px)" }}>
+                <div style={{ width: 36, height: 36, borderRadius: 8, background: "var(--orange)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 14, flexShrink: 0, boxShadow: "0 2px 0 var(--orange-shadow)" }}>{item.step}</div>
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: 15, color: "var(--text-strong)", marginBottom: 2 }}>{item.title}</div>
-                  <div style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.6 }}>{item.desc}</div>
+                  <div style={{ fontWeight: 600, fontSize: 15, color: "#f2f2f2", marginBottom: 2 }}>{item.title}</div>
+                  <div style={{ fontSize: 13, color: "#999", lineHeight: 1.6 }}>{item.desc}</div>
                 </div>
               </motion.div>
             ))}
@@ -235,7 +237,7 @@ export default function Home() {
           {/* Footer */}
           <div style={{
             maxWidth: 640, margin: "0 auto", padding: "24px 32px 40px",
-            borderTop: "1px solid var(--border-subtle)", fontSize: 12, color: "var(--text-faint)", textAlign: "center",
+            borderTop: "1px solid rgba(118,118,118,0.2)", fontSize: 12, color: "#767676", textAlign: "center",
           }}>
             <p>Powered by LaT-PFN Zero-Shot Forecasting | Deployed on Base L2</p>
             <p style={{ marginTop: 6 }}>

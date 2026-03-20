@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Solid black fill (kills white corners) -->
+  <rect width="1024" height="1024" fill="#0c0c0c"/>
+  <!-- Subtle rounded inner border -->
+  <rect x="24" y="24" width="976" height="976" rx="64" fill="none" stroke="#767676" stroke-width="1.5" opacity="0.15"/>
+
+  <!-- Scanlines -->
+  <g opacity="0.03">
+    <line x1="0" y1="80" x2="1024" y2="80" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="160" x2="1024" y2="160" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="240" x2="1024" y2="240" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="320" x2="1024" y2="320" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="400" x2="1024" y2="400" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="480" x2="1024" y2="480" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="560" x2="1024" y2="560" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="640" x2="1024" y2="640" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="720" x2="1024" y2="720" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="800" x2="1024" y2="800" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="880" x2="1024" y2="880" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="960" x2="1024" y2="960" stroke="#fff" stroke-width="1"/>
+  </g>
+
+  <!-- Chart line -->
+  <polyline points="160,700 240,660 320,680 400,580 480,600 560,500 640,540 720,440 800,460 880,380"
+    fill="none" stroke="#16c60c" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity="0.35"/>
+  <polyline points="160,700 240,660 320,680 400,580 480,600 560,500 640,540 720,440 800,460 880,380"
+    fill="none" stroke="#16c60c" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
+
+  <!-- Signal dots -->
+  <circle cx="400" cy="580" r="10" fill="#16c60c" opacity="0.7"/>
+  <circle cx="560" cy="500" r="10" fill="#16c60c" opacity="0.7"/>
+  <circle cx="800" cy="460" r="10" fill="#e74856" opacity="0.7"/>
+
+  <!-- Main text -->
+  <text x="512" y="380" text-anchor="middle" font-family="'JetBrains Mono','SF Mono','Consolas',monospace" font-weight="700" font-size="120" fill="#61d6d6" letter-spacing="-2">LaT-PFN</text>
+
+  <!-- Subtitle -->
+  <text x="512" y="460" text-anchor="middle" font-family="'JetBrains Mono','SF Mono','Consolas',monospace" font-weight="400" font-size="48" fill="#767676" letter-spacing="8">SIGNALS</text>
+
+  <!-- Live pulse dot -->
+  <circle cx="860" cy="164" r="20" fill="#16c60c" opacity="0.9"/>
+</svg>

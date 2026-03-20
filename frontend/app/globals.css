@@ -73,7 +73,7 @@ body {
 ::-webkit-scrollbar-thumb:hover { background: var(--border-bold); }
 
 /* ===== LANDING PAGE ===== */
-.landing { overflow-y: auto; height: 100vh; background: var(--bg); }
+.landing { overflow-y: auto; height: 100vh; position: relative; z-index: 1; }
 
 /* Hero dark section with background image */
 .hero-section {
