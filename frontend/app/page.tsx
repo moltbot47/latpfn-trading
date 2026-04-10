@@ -17,20 +17,20 @@ const STATS = [
 ];
 
 const BASIC_FEATURES = [
-  "Real-time LaT-PFN forecasts",
-  "All 4 active instruments",
-  "Entry / SL / TP levels",
-  "NBA shot-tier classification",
-  "On-chain verification",
+  "Real-time buy & sell signals",
+  "4 markets: Nasdaq, Dow, S&P, Bitcoin",
+  "Exact entry, stop loss & take profit prices",
+  "Confidence rating on every signal",
+  "On-chain proof — results can't be faked",
 ];
 
 const PREMIUM_FEATURES = [
   "Everything in Basic",
-  "Regime detection (trending/ranging/volatile)",
-  "Confidence breakdown",
-  "EMA trend filter insights",
-  "Priority API access",
-  "Signal archive",
+  "Market regime alerts (trending / ranging / volatile)",
+  "Detailed confidence breakdown per signal",
+  "Trend direction filter (avoid counter-trend trades)",
+  "Priority API access for automation",
+  "Full signal history & archive",
 ];
 
 const fadeUp = {
@@ -135,15 +135,15 @@ export default function Home() {
             <button className="btn-raised" style={{ fontSize: 12, padding: "4px 12px", background: "rgba(255,255,255,0.1)", color: "#f2f2f2", borderColor: "rgba(118,118,118,0.3)" }} onClick={logout}>Sign Out</button>
           </div>
         ) : (
-          <button className="btn-raised primary" onClick={login}>Sign In</button>
+          <button className="btn-raised primary" onClick={() => router.push("/terminal/dashboard")}>Sign In</button>
         )}
       </nav>
 
       {/* ===== HERO (unauthenticated) ===== */}
       {showHero && (
         <>
-          <div className="hero-section" style={{ padding: "80px 32px 100px", textAlign: "center" }}>
-            <div className="hero-pattern" />
+          <div className="hero-section" style={{ padding: "80px 32px 100px", textAlign: "center", position: "relative", zIndex: 2 }}>
+            <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at center, rgba(12,12,12,0.3) 0%, rgba(12,12,12,0.85) 70%)", zIndex: -1 }} />
             <motion.div initial="hidden" animate="visible" custom={0} variants={fadeUp}>
               <div className="badge-green" style={{
                 display: "inline-flex", alignItems: "center", gap: 8,
@@ -159,18 +159,18 @@ export default function Home() {
             <motion.h1 initial="hidden" animate="visible" custom={1} variants={fadeUp}
               style={{ fontSize: 56, fontWeight: 800, color: "#fff", lineHeight: 1.05, marginBottom: 20,
                 letterSpacing: "-0.03em", textShadow: "0 2px 16px rgba(0,0,0,0.5)" }}>
-              AI Trading Signals<br />
-              <span style={{ color: "var(--orange)" }}>Verified On-Chain</span>
+              AI Tells You When to<br />
+              <span style={{ color: "var(--orange)" }}>Buy & Sell Futures</span>
             </motion.h1>
 
             <motion.p initial="hidden" animate="visible" custom={2} variants={fadeUp}
-              style={{ fontSize: 16, color: "rgba(255,255,255,0.7)", maxWidth: 520, margin: "0 auto 44px", lineHeight: 1.7 }}>
-              Zero-shot LaT-PFN forecasting for micro futures. Every signal hashed and posted to Base L2 before delivery. No hindsight bias — ever.
+              style={{ fontSize: 16, color: "rgba(255,255,255,0.7)", maxWidth: 560, margin: "0 auto 44px", lineHeight: 1.7 }}>
+              Get real-time buy/sell signals for Nasdaq, Dow, S&P, and Bitcoin micro futures — with exact entry prices, stop losses, and profit targets. Every prediction is recorded on-chain <em>before</em> delivery so results can never be faked.
             </motion.p>
 
             <motion.div initial="hidden" animate="visible" custom={3} variants={fadeUp}
               style={{ display: "flex", justifyContent: "center", gap: 14, marginBottom: 14 }}>
-              <button className="btn-hero" onClick={login}>Get Started Free</button>
+              <button className="btn-hero" onClick={() => router.push("/terminal/dashboard")}>Get Started Free</button>
               <button className="btn-hero-ghost" aria-label="Scroll to how it works section"
                 onClick={() => document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" })}>
                 Learn More
@@ -178,16 +178,16 @@ export default function Home() {
             </motion.div>
             <motion.p initial="hidden" animate="visible" custom={4} variants={fadeUp}
               style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>
-              Email, Google, Twitter, Apple — or connect your wallet. No wallet needed.
+              Sign in with email, Google, Twitter, or Apple — no crypto wallet needed to start.
             </motion.p>
           </div>
 
           {/* Stats */}
-          <div style={{ maxWidth: 960, margin: "-40px auto 0", padding: "0 32px", position: "relative", zIndex: 3 }}>
+          <div style={{ maxWidth: 960, margin: "-40px auto 0", padding: "0 32px", position: "relative", zIndex: 5 }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
               {STATS.map((s, i) => (
                 <motion.div key={s.label} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={i} variants={fadeUp}
-                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(118,118,118,0.15)", borderRadius: 10, padding: 20, textAlign: "center", backdropFilter: "blur(8px)" }}>
+                  style={{ background: "rgba(20,20,20,0.95)", border: "1px solid rgba(118,118,118,0.2)", borderRadius: 10, padding: 20, textAlign: "center" }}>
                   <div className="kpi-value" style={{ color: s.color === "var(--green)" ? "#16c60c" : "#f2f2f2", marginBottom: 6 }}>{s.value}</div>
                   <div style={{ fontSize: 11, color: "#767676", textTransform: "uppercase", letterSpacing: "0.8px", fontWeight: 600 }}>
                     {s.label}
@@ -202,20 +202,48 @@ export default function Home() {
             </div>
           </div>
 
-          {/* How It Works */}
-          <div id="how-it-works" style={{ maxWidth: 640, margin: "72px auto 0", padding: "0 32px" }}>
+          {/* ===== CONTENT SECTIONS (solid background to cover particles) ===== */}
+          <div style={{ background: "#0c0c0c", position: "relative", zIndex: 4, paddingTop: 1 }}>
+
+          {/* What You Get */}
+          <div id="how-it-works" style={{ maxWidth: 720, margin: "72px auto 0", padding: "0 32px" }}>
             <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} custom={0} variants={fadeUp}>
               <div className="section-divider" />
-              <h2 style={{ fontSize: 24, fontWeight: 700, color: "#f2f2f2", marginBottom: 24 }}>How It Works</h2>
+              <h2 style={{ fontSize: 24, fontWeight: 700, color: "#f2f2f2", marginBottom: 8 }}>What You Get</h2>
+              <p style={{ fontSize: 14, color: "#999", marginBottom: 28, lineHeight: 1.6 }}>
+                A live trading terminal that watches the market 24/5 and tells you exactly when to trade — and what price to enter, where to set your stop loss, and where to take profit.
+              </p>
             </motion.div>
             {[
-              { step: "1", title: "Sign In", desc: "Email, Google, Twitter, Apple — or connect MetaMask, Coinbase, 300+ wallets. We auto-create a wallet if you don't have one." },
-              { step: "2", title: "Subscribe", desc: `${monthlyPrice} ETH/month — on-chain via Base L2. Cancel anytime.` },
-              { step: "3", title: "Access Terminal", desc: "Live charts, signals, positions — TradingView-style interface with real-time updates." },
-              { step: "4", title: "Verify On-Chain", desc: "Every forecast hashed on Base before delivery. Check Basescan yourself — fully transparent." },
+              { icon: "📊", title: "Real-Time Buy & Sell Signals", desc: "Our AI analyzes price patterns every 5 minutes and generates signals with exact entry, stop loss, and take profit levels for micro futures (MNQ, MYM, MES, MBT)." },
+              { icon: "🎯", title: "Confidence Ratings on Every Signal", desc: "Each signal is ranked by confidence level — from high-conviction \"layups\" to speculative \"three-pointers\" — so you know how much to risk." },
+              { icon: "⛓️", title: "On-Chain Proof (No Fake Results)", desc: "Every prediction is hashed and posted to the Base blockchain before you see it. Anyone can verify on Basescan — we can't edit or delete past signals." },
+              { icon: "📈", title: "TradingView-Style Terminal", desc: "Live charts, signal history, open positions, and performance stats — all in one clean dashboard you can access from any browser." },
+            ].map((item, i) => (
+              <motion.div key={item.title} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={i + 1} variants={fadeUp}
+                style={{ display: "flex", gap: 16, marginBottom: 12, cursor: "default", background: "rgba(20,20,20,0.95)", border: "1px solid rgba(118,118,118,0.2)", borderRadius: 10, padding: 24 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{item.icon}</div>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 15, color: "#f2f2f2", marginBottom: 4 }}>{item.title}</div>
+                  <div style={{ fontSize: 13, color: "#999", lineHeight: 1.6 }}>{item.desc}</div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* How It Works */}
+          <div style={{ maxWidth: 720, margin: "56px auto 0", padding: "0 32px" }}>
+            <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} custom={0} variants={fadeUp}>
+              <div className="section-divider" />
+              <h2 style={{ fontSize: 24, fontWeight: 700, color: "#f2f2f2", marginBottom: 24 }}>How to Get Started</h2>
+            </motion.div>
+            {[
+              { step: "1", title: "Create a Free Account", desc: "Sign in with email, Google, Twitter, or Apple. No crypto wallet needed — we create one for you automatically." },
+              { step: "2", title: "Subscribe for ~$10/month", desc: `Pay ${monthlyPrice} ETH/month (~$${(parseFloat(monthlyPrice) * 2600).toFixed(0)} USD at current prices) on Base L2. Gas fees are under $0.01. Cancel anytime.` },
+              { step: "3", title: "Open the Terminal & Trade", desc: "See live signals with entry/exit levels. Copy them to your broker, or just watch and learn. The AI runs 24/5 during market hours." },
             ].map((item, i) => (
               <motion.div key={item.step} initial="hidden" whileInView="visible" viewport={{ once: true }} custom={i + 1} variants={fadeUp}
-                style={{ display: "flex", gap: 16, marginBottom: 12, cursor: "default", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(118,118,118,0.15)", borderRadius: 10, padding: 24, backdropFilter: "blur(8px)" }}>
+                style={{ display: "flex", gap: 16, marginBottom: 12, cursor: "default", background: "rgba(20,20,20,0.95)", border: "1px solid rgba(118,118,118,0.2)", borderRadius: 10, padding: 24 }}>
                 <div style={{ width: 36, height: 36, borderRadius: 8, background: "var(--orange)", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 14, flexShrink: 0, boxShadow: "0 2px 0 var(--orange-shadow)" }}>{item.step}</div>
                 <div>
                   <div style={{ fontWeight: 600, fontSize: 15, color: "#f2f2f2", marginBottom: 2 }}>{item.title}</div>
@@ -229,7 +257,7 @@ export default function Home() {
           <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} custom={0} variants={fadeUp}
             style={{ textAlign: "center", margin: "56px 0 24px" }}>
             <button className="btn-raised primary" style={{ padding: "12px 32px", fontSize: 16, borderRadius: 10 }}
-              onClick={login}>
+              onClick={() => router.push("/terminal/dashboard")}>
               Start Trading with AI
             </button>
           </motion.div>
@@ -239,7 +267,7 @@ export default function Home() {
             maxWidth: 640, margin: "0 auto", padding: "24px 32px 40px",
             borderTop: "1px solid rgba(118,118,118,0.2)", fontSize: 12, color: "#767676", textAlign: "center",
           }}>
-            <p>Powered by LaT-PFN Zero-Shot Forecasting | Deployed on Base L2</p>
+            <p>AI-powered trading signals | Verified on Base blockchain</p>
             <p style={{ marginTop: 6 }}>
               Contract:{" "}
               <a href="https://basescan.org/address/0x901c169aa21a9eC593c52bc6F0eaA814eDf41091"
@@ -253,6 +281,8 @@ export default function Home() {
               </a>
             </p>
           </div>
+
+          </div> {/* end solid background content wrapper */}
         </>
       )}
 
@@ -263,7 +293,7 @@ export default function Home() {
           <p style={{ color: "var(--text-muted)", marginBottom: 28, fontSize: 14, maxWidth: 420, margin: "0 auto 28px" }}>
             Connect a wallet on Base L2 to subscribe and access the trading terminal.
           </p>
-          <button className="btn-raised primary" style={{ padding: "10px 28px", fontSize: 14 }} onClick={login}>
+          <button className="btn-raised primary" style={{ padding: "10px 28px", fontSize: 14 }} onClick={() => router.push("/terminal/dashboard")}>
             Connect Wallet
           </button>
           <div style={{ marginTop: 20 }}>
@@ -297,9 +327,10 @@ export default function Home() {
             <div className="ph-card">
               <h3 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-strong)", marginBottom: 4 }}>Basic</h3>
               <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 20 }}>All signals for MNQ, MYM, MES, MBT</p>
-              <div className="kpi-value" style={{ marginBottom: 20 }}>
+              <div className="kpi-value" style={{ marginBottom: 4 }}>
                 {monthlyPrice} <span style={{ fontSize: 16, color: "var(--text-faint)", fontWeight: 400, fontFamily: "inherit" }}>ETH/mo</span>
               </div>
+              <p style={{ fontSize: 12, color: "var(--text-faint)", marginBottom: 20 }}>~${(parseFloat(monthlyPrice) * 2600).toFixed(0)} USD at current prices</p>
               {BASIC_FEATURES.map((f) => (
                 <div key={f} style={{ fontSize: 13, color: "var(--text-muted)", padding: "4px 0", display: "flex", gap: 8 }}>
                   <span style={{ color: "var(--green)", fontWeight: 700 }}>&#10003;</span> {f}
@@ -333,9 +364,10 @@ export default function Home() {
               </div>
               <h3 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-strong)", marginBottom: 4 }}>Premium</h3>
               <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 20 }}>Everything + regime analysis & confidence</p>
-              <div className="kpi-value" style={{ marginBottom: 20 }}>
+              <div className="kpi-value" style={{ marginBottom: 4 }}>
                 {(parseFloat(monthlyPrice) * 2).toFixed(4)} <span style={{ fontSize: 16, color: "var(--text-faint)", fontWeight: 400, fontFamily: "inherit" }}>ETH/mo</span>
               </div>
+              <p style={{ fontSize: 12, color: "var(--text-faint)", marginBottom: 20 }}>~${(parseFloat(monthlyPrice) * 2 * 2600).toFixed(0)} USD at current prices</p>
               {PREMIUM_FEATURES.map((f) => (
                 <div key={f} style={{ fontSize: 13, color: "var(--text-muted)", padding: "4px 0", display: "flex", gap: 8 }}>
                   <span style={{ color: "var(--orange)", fontWeight: 700 }}>&#10003;</span> {f}
@@ -377,7 +409,7 @@ export default function Home() {
           <p style={{ color: "var(--text-muted)", marginBottom: 28, fontSize: 14 }}>
             Switch to Base network to access LaT-PFN signals.
           </p>
-          <button className="btn-raised primary" style={{ padding: "10px 28px", fontSize: 14 }} onClick={login}>
+          <button className="btn-raised primary" style={{ padding: "10px 28px", fontSize: 14 }} onClick={() => router.push("/terminal/dashboard")}>
             Switch Network
           </button>
         </div>
