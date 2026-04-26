@@ -18,7 +18,7 @@ python-dateutil>=2.8.0
 pytz>=2023.3
 
 # Discord bot
-discord.py>=2.3.0
+discord.py>=2.7.1
 
 # Monitoring
 rich>=13.0.0
