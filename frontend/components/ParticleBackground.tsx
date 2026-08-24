@@ -8,13 +8,11 @@ interface Particle {
   vx: number;
   vy: number;
   size: number;
-  h: number;
   r: number;
   g: number;
   b: number;
   life: number;
   maxLife: number;
-  accel: number;
 }
 
 export default function ParticleBackground() {
@@ -26,87 +24,91 @@ export default function ParticleBackground() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    let W: number, H: number, CX: number, CY: number;
+    let W: number, H: number;
     const particles: Particle[] = [];
-    const MAX_PARTICLES = 500;
+    const MAX_PARTICLES = 80;
     let animId: number;
 
     function resize() {
       W = canvas!.width = canvas!.offsetWidth;
       H = canvas!.height = canvas!.offsetHeight;
-      CX = W / 2;
-      CY = H / 2;
     }
 
     function spawn() {
-      const angle = Math.random() * Math.PI * 2;
-      const edgeDist = Math.max(W, H) * (0.5 + Math.random() * 0.3);
+      // Spawn from random edge
+      const side = Math.random();
+      let x: number, y: number;
+      if (side < 0.25) { x = Math.random() * W; y = -5; }
+      else if (side < 0.5) { x = Math.random() * W; y = H + 5; }
+      else if (side < 0.75) { x = -5; y = Math.random() * H; }
+      else { x = W + 5; y = Math.random() * H; }
 
-      const brightness = Math.random();
-      let r: number, g: number, b: number;
-      if (brightness < 0.65) {
-        const v = 35 + Math.random() * 50;
-        r = v; g = v; b = v;
-      } else if (brightness < 0.9) {
-        const v = 85 + Math.random() * 70;
-        r = v; g = v; b = v;
-      } else {
-        const v = 180 + Math.random() * 75;
-        r = v; g = v; b = v;
-      }
+      // Drift slowly toward center with slight randomness
+      const angle = Math.atan2(H / 2 - y, W / 2 - x) + (Math.random() - 0.5) * 0.8;
+      const speed = 0.15 + Math.random() * 0.25;
+
+      const v = 30 + Math.random() * 40;
 
       particles.push({
-        x: CX + Math.cos(angle) * edgeDist,
-        y: CY + Math.sin(angle) * edgeDist,
-        vx: -Math.cos(angle) * (0.3 + Math.random() * 0.8),
-        vy: -Math.sin(angle) * (0.3 + Math.random() * 0.8),
-        size: 3 + Math.random() * 5,
-        h: 1 + Math.random() * 5,
-        r, g, b,
+        x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        size: 1 + Math.random() * 1.5,
+        r: v, g: v, b: v,
         life: 0,
-        maxLife: 200 + Math.random() * 300,
-        accel: 1.003 + Math.random() * 0.004,
+        maxLife: 400 + Math.random() * 400,
       });
     }
 
     function update() {
-      ctx!.fillStyle = "rgba(12, 12, 12, 0.12)";
-      ctx!.fillRect(0, 0, W, H);
+      ctx!.clearRect(0, 0, W, H);
 
-      for (let s = 0; s < 3; s++) {
-        if (particles.length < MAX_PARTICLES) spawn();
+      // Spawn slowly
+      if (particles.length < MAX_PARTICLES && Math.random() < 0.3) {
+        spawn();
       }
 
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
         p.life++;
-        p.vx *= p.accel;
-        p.vy *= p.accel;
         p.x += p.vx;
         p.y += p.vy;
 
-        const dist = Math.sqrt((p.x - CX) ** 2 + (p.y - CY) ** 2);
-        const maxDist = Math.max(W, H) * 0.7;
-        const scale = 0.2 + (dist / maxDist) * 2;
-
+        // Fade in/out
         const lifeRatio = p.life / p.maxLife;
         let alpha: number;
-        if (lifeRatio < 0.1) alpha = lifeRatio / 0.1;
+        if (lifeRatio < 0.15) alpha = lifeRatio / 0.15;
         else if (lifeRatio > 0.7) alpha = (1 - lifeRatio) / 0.3;
         else alpha = 1;
-        alpha *= 0.6;
+        alpha *= 0.15; // Very subtle
 
-        const bMult = 0.6 + (dist / maxDist) * 0.5;
-        const drawW = p.size * scale;
-        const drawH = p.h * scale;
-
-        if (alpha > 0.01) {
-          ctx!.fillStyle = `rgba(${(p.r * bMult) | 0},${(p.g * bMult) | 0},${(p.b * bMult) | 0},${alpha})`;
-          ctx!.fillRect(p.x - drawW / 2, p.y - drawH / 2, drawW, drawH);
+        if (alpha > 0.005) {
+          ctx!.beginPath();
+          ctx!.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx!.fillStyle = `rgba(${p.r},${p.g},${p.b},${alpha})`;
+          ctx!.fill();
         }
 
-        if (p.life > p.maxLife || p.x < -50 || p.x > W + 50 || p.y < -50 || p.y > H + 50) {
+        if (p.life > p.maxLife || p.x < -20 || p.x > W + 20 || p.y < -20 || p.y > H + 20) {
           particles.splice(i, 1);
+        }
+      }
+
+      // Draw subtle connecting lines between nearby particles
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 150) {
+            const lineAlpha = (1 - dist / 150) * 0.06;
+            ctx!.beginPath();
+            ctx!.moveTo(particles[i].x, particles[i].y);
+            ctx!.lineTo(particles[j].x, particles[j].y);
+            ctx!.strokeStyle = `rgba(100,100,100,${lineAlpha})`;
+            ctx!.lineWidth = 0.5;
+            ctx!.stroke();
+          }
         }
       }
 

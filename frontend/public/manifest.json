@@ -1,0 +1,21 @@
+{
+  "name": "LaT-PFN Signals",
+  "short_name": "LaT-PFN",
+  "description": "AI-powered futures trading signals verified on-chain via Base L2",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c0c0c",
+  "theme_color": "#61d6d6",
+  "icons": [
+    {
+      "src": "/logo-250.png",
+      "sizes": "250x250",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png"
+    }
+  ]
+}

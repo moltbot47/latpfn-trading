@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="628" viewBox="0 0 1200 628">
+  <!-- Background -->
+  <rect width="1200" height="628" fill="#0c0c0c"/>
+
+  <!-- Subtle grid -->
+  <g opacity="0.03">
+    <line x1="0" y1="50" x2="1200" y2="50" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="100" x2="1200" y2="100" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="150" x2="1200" y2="150" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="200" x2="1200" y2="200" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="250" x2="1200" y2="250" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="300" x2="1200" y2="300" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="350" x2="1200" y2="350" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="400" x2="1200" y2="400" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="450" x2="1200" y2="450" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="500" x2="1200" y2="500" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="550" x2="1200" y2="550" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="600" x2="1200" y2="600" stroke="#fff" stroke-width="1"/>
+  </g>
+
+  <!-- Chart line (background decoration) -->
+  <polyline points="80,420 180,390 280,400 380,340 480,355 580,290 680,310 780,250 880,265 980,220 1080,200 1140,185"
+    fill="none" stroke="#16c60c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.25"/>
+  <polyline points="80,420 180,390 280,400 380,340 480,355 580,290 680,310 780,250 880,265 980,220 1080,200 1140,185"
+    fill="none" stroke="#16c60c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>
+
+  <!-- Signal dots -->
+  <circle cx="380" cy="340" r="6" fill="#16c60c" opacity="0.6"/>
+  <circle cx="580" cy="290" r="6" fill="#16c60c" opacity="0.6"/>
+  <circle cx="880" cy="265" r="6" fill="#e74856" opacity="0.6"/>
+  <circle cx="1080" cy="200" r="6" fill="#16c60c" opacity="0.6"/>
+
+  <!-- Main text -->
+  <text x="600" y="240" text-anchor="middle" font-family="'JetBrains Mono','SF Mono','Consolas',monospace" font-weight="700" font-size="72" fill="#61d6d6" letter-spacing="-1">LaT-PFN Signals</text>
+
+  <!-- Subtitle -->
+  <text x="600" y="290" text-anchor="middle" font-family="'JetBrains Mono','SF Mono','Consolas',monospace" font-weight="400" font-size="24" fill="#767676">AI Trading Signals Verified On-Chain</text>
+
+  <!-- Stats row -->
+  <text x="250" y="510" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-weight="700" font-size="28" fill="#16c60c">56.7%</text>
+  <text x="250" y="540" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="12" fill="#767676">WIN RATE</text>
+
+  <text x="450" y="510" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-weight="700" font-size="28" fill="#16c60c">1.61</text>
+  <text x="450" y="540" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="12" fill="#767676">PROFIT FACTOR</text>
+
+  <text x="650" y="510" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-weight="700" font-size="28" fill="#f2f2f2">187</text>
+  <text x="650" y="540" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="12" fill="#767676">LIVE TRADES</text>
+
+  <text x="850" y="510" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-weight="700" font-size="28" fill="#16c60c">+$3,205</text>
+  <text x="850" y="540" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="12" fill="#767676">TOTAL P&amp;L</text>
+
+  <!-- Live dot -->
+  <circle cx="1100" cy="60" r="8" fill="#16c60c" opacity="0.9"/>
+
+  <!-- Base badge -->
+  <text x="1060" y="590" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-weight="700" font-size="14" fill="#3b78ff">Built on Base</text>
+</svg>

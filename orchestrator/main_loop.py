@@ -130,6 +130,18 @@ class TradingSystem:
         self.trade_logger = TradeLogger()
         self.order_mgr = OrderManager(trade_logger=self.trade_logger)
 
+        # On-chain forecast posting
+        self._forecast_poster = None
+        try:
+            from onchain.poster import ForecastPoster
+            self._forecast_poster = ForecastPoster()
+            if self._forecast_poster.enabled:
+                logger.info("On-chain forecast posting enabled")
+            else:
+                self._forecast_poster = None
+        except Exception as e:
+            logger.debug("On-chain posting unavailable: %s", e)
+
         # State
         self.cycle = 0
         if self.is_hyperliquid:
@@ -151,6 +163,17 @@ class TradingSystem:
 
         # Contract symbol cache (root → active contract)
         self._contract_cache: dict[str, str] = {}
+
+        # News calendar filter (Forex Factory)
+        self._news_filter = None
+        news_cfg = config.get("signal", {}).get("news_filter", {})
+        if news_cfg.get("enabled", False):
+            try:
+                from signals.news_filter import NewsFilter
+                self._news_filter = NewsFilter(news_cfg)
+                logger.info("News filter loaded: mode=%s", news_cfg.get("mode", "gate"))
+            except Exception as e:
+                logger.warning("Failed to load news filter: %s", e)
 
         # Microstructure components (Hyperliquid only)
         self._orderbook_scorer = None
@@ -953,6 +976,23 @@ class TradingSystem:
                         instrument, old_conf, signal.confidence,
                     )
 
+        # ── News calendar filter — avoid trading around high-impact events ──
+        if signal is not None and self._news_filter is not None:
+            news_mode = self._news_filter._config.get("mode", "gate")
+            allowed, reason, mult = self._news_filter.check_news_clear(
+                instrument, mode=news_mode
+            )
+            logger.info("%s: News filter: %s", instrument, reason)
+            if not allowed:
+                signal = None
+            elif mult < 1.0:
+                old_conf = signal.confidence
+                signal.confidence *= mult
+                logger.info(
+                    "%s: news penalty applied — confidence %.3f → %.3f",
+                    instrument, old_conf, signal.confidence,
+                )
+
         # ── Microstructure confidence adjustments (Hyperliquid) ──
         if signal is not None and self.is_hyperliquid:
             # Liquidation cascade safety check
@@ -1055,6 +1095,10 @@ class TradingSystem:
 
         if signal is None:
             return prediction, None
+
+        # Post forecast hash on-chain (non-blocking — failures are logged, not raised)
+        if self._forecast_poster:
+            self._forecast_poster.post_signal(signal)
 
         # Return as a candidate for ranking
         candidate = {

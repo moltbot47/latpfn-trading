@@ -282,6 +282,19 @@ signal:
     mode: gate              # gate = hard reject, soft = 0.7x penalty
     # Hyperliquid override: soft mode applies penalty instead of blocking
     mode_hyperliquid: soft
+  # ── Forex Factory News Filter ──────────────────────────────
+  # Blocks or penalizes new entries around high-impact economic events
+  # (FOMC, NFP, CPI, etc.) using the Forex Factory calendar API.
+  # Does NOT affect existing positions, profit-taking, or trailing stops.
+  news_filter:
+    enabled: true
+    mode: gate                       # gate = block new trades, soft = confidence penalty
+    currencies: [USD]                # filter events for these currencies
+    high_impact_window_minutes: 15   # ±15 min around High-impact events (FOMC, NFP, CPI)
+    medium_impact_window_minutes: 10 # ±10 min around Medium-impact events (Retail Sales, PPI)
+    high_impact_penalty: 0.5         # soft mode: 0.5x confidence for High events
+    medium_impact_penalty: 0.7       # soft mode: 0.7x confidence for Medium events
+    cache_ttl_seconds: 300           # refresh calendar every 5 min
   # ── Time-Based Volatility Boost ──────────────────────────────
   # Adjusts confidence based on time of day (all times ET).
   # NYSE open = highest edge, lunch = lowest, power hour = moderate.

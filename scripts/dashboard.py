@@ -32,8 +32,15 @@ from flask import Flask, jsonify, render_template, request
 # Project root
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "scripts"))
 
 from config import load_config
+from pokemon_prices import (
+    search_cards, get_sets, get_portfolio, get_portfolio_summary,
+    add_card, delete_card, refresh_all_prices, get_price_history,
+    get_watchlist, add_to_watchlist, remove_from_watchlist, get_top_movers,
+    init_pokemon_db,
+)
 
 app = Flask(__name__, template_folder=str(ROOT / "templates"))
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB max upload
@@ -111,6 +118,7 @@ def _init_report_db():
 
 # Initialize on import
 _init_report_db()
+init_pokemon_db()
 
 
 # ── API: System Status ─────────────────────────────────────────────────
@@ -1338,6 +1346,84 @@ def api_system_config():
             "profit_target_usd": prop.get("profit_target_usd", 0),
         },
     })
+
+
+# ── API: Pokemon TCG ───────────────────────────────────────────────────
+
+
+@app.route("/api/pokemon/search")
+def api_pokemon_search():
+    q = request.args.get("q", "")
+    if not q or len(q) < 2:
+        return jsonify({"cards": [], "total": 0})
+    return jsonify(search_cards(q))
+
+
+@app.route("/api/pokemon/sets")
+def api_pokemon_sets():
+    return jsonify(get_sets())
+
+
+@app.route("/api/pokemon/portfolio")
+def api_pokemon_portfolio():
+    return jsonify(get_portfolio())
+
+
+@app.route("/api/pokemon/portfolio/summary")
+def api_pokemon_portfolio_summary():
+    return jsonify(get_portfolio_summary())
+
+
+@app.route("/api/pokemon/card", methods=["POST"])
+def api_pokemon_add_card():
+    data = request.get_json()
+    if not data or not data.get("name"):
+        return jsonify({"error": "Card name is required"}), 400
+    card_id = add_card(data)
+    return jsonify({"id": card_id, "status": "added"})
+
+
+@app.route("/api/pokemon/card/<int:card_id>", methods=["DELETE"])
+def api_pokemon_delete_card(card_id):
+    delete_card(card_id)
+    return jsonify({"status": "deleted"})
+
+
+@app.route("/api/pokemon/prices/refresh", methods=["POST"])
+def api_pokemon_refresh_prices():
+    result = refresh_all_prices()
+    return jsonify(result)
+
+
+@app.route("/api/pokemon/prices/history/<int:card_id>")
+def api_pokemon_price_history(card_id):
+    return jsonify(get_price_history(card_id))
+
+
+@app.route("/api/pokemon/movers")
+def api_pokemon_movers():
+    days = int(request.args.get("days", 7))
+    return jsonify(get_top_movers(days))
+
+
+@app.route("/api/pokemon/watchlist", methods=["GET"])
+def api_pokemon_watchlist_get():
+    return jsonify(get_watchlist())
+
+
+@app.route("/api/pokemon/watchlist", methods=["POST"])
+def api_pokemon_watchlist_add():
+    data = request.get_json()
+    if not data or not data.get("name"):
+        return jsonify({"error": "Name is required"}), 400
+    wid = add_to_watchlist(data)
+    return jsonify({"id": wid, "status": "added"})
+
+
+@app.route("/api/pokemon/watchlist/<int:wid>", methods=["DELETE"])
+def api_pokemon_watchlist_delete(wid):
+    remove_from_watchlist(wid)
+    return jsonify({"status": "removed"})
 
 
 # ── Main page ──────────────────────────────────────────────────────────

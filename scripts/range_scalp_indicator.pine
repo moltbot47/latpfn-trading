@@ -1,0 +1,456 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0
+// © latpfn-trading
+//@version=5
+indicator("15s Range Scalp + Patterns + Volume", overlay=true, max_boxes_count=200, max_labels_count=500, max_lines_count=500)
+
+// ═══════════════════════════════════════════════════════════════
+// INPUTS
+// ═══════════════════════════════════════════════════════════════
+
+i_mode       = input.string("Auto", "Mode", options=["Auto","Manual"], group="Zones")
+i_lookback   = input.int(20, "Lookback", minval=5, group="Zones")
+i_zonePct    = input.float(0.05, "Zone Width %", step=0.01, group="Zones")
+i_manBuy     = input.float(0.0, "Manual Buy Level", group="Zones")
+i_manSell    = input.float(0.0, "Manual Sell Level", group="Zones")
+
+i_vpLen      = input.int(100, "VP Lookback Bars", minval=20, maxval=500, group="Volume Profile")
+i_vpRows     = input.int(24, "VP Price Rows", minval=10, maxval=50, group="Volume Profile", tooltip="More rows = finer resolution")
+i_vpWidth    = input.int(6, "VP Bar Width", minval=1, maxval=50, group="Volume Profile")
+i_showVP     = input.bool(true, "Show Volume Profile", group="Volume Profile")
+i_showPOC    = input.bool(true, "Show POC Line", group="Volume Profile")
+i_showVAHL   = input.bool(true, "Show Value Area", group="Volume Profile")
+
+i_showDelta  = input.bool(true, "Show Delta Bars", group="Delta")
+i_deltaLen   = input.int(14, "Delta SMA Length", minval=3, group="Delta")
+i_absorbVol  = input.float(2.0, "Absorption: Vol × Avg", minval=1.2, step=0.1, group="Delta", tooltip="Volume spike threshold for absorption detection")
+
+i_dollarPt   = input.float(10.0, "$ Per Point Per 0.1 Lot", group="Risk", tooltip="XAUUSD=10, NAS100=1")
+i_maxDD      = input.float(250.0, "Max Drawdown $", group="Risk")
+i_lotStep    = input.float(0.1, "Lot Step Size", group="Risk", tooltip="0.10 for gold, 0.01 for some brokers")
+
+i_useSess    = input.bool(true, "Session Filter", group="Session")
+i_sess       = input.session("0830-1100", "Session (ET)", group="Session")
+
+i_showPat    = input.bool(true, "Show Candle Patterns", group="Visuals")
+i_showTable  = input.bool(true, "Show Dashboard", group="Visuals")
+i_trailPct   = input.float(0.03, "Trail Stop %", step=0.005, group="Visuals")
+
+// ═══════════════════════════════════════════════════════════════
+// SESSION
+// ═══════════════════════════════════════════════════════════════
+
+inSess = i_useSess ? not na(time(timeframe.period, i_sess, "America/New_York")) : true
+bgcolor(inSess and i_useSess ? color.new(color.blue, 95) : na, title="Session")
+
+// ═══════════════════════════════════════════════════════════════
+// ZONE DETECTION (must come first — other sections depend on these)
+// ═══════════════════════════════════════════════════════════════
+
+pivH = ta.pivothigh(high, i_lookback, i_lookback)
+pivL = ta.pivotlow(low, i_lookback, i_lookback)
+
+var float aRes = na
+var float aSup = na
+if not na(pivH)
+    aRes := pivH
+if not na(pivL)
+    aSup := pivL
+
+float res = i_mode == "Manual" and i_manSell > 0 ? i_manSell : aRes
+float sup = i_mode == "Manual" and i_manBuy  > 0 ? i_manBuy  : aSup
+
+float buyLvl  = na(sup) or na(res) ? na : math.min(sup, res)
+float sellLvl = na(sup) or na(res) ? na : math.max(sup, res)
+float mid     = na(buyLvl) ? na : (buyLvl + sellLvl) / 2.0
+
+float zw      = na(sellLvl) ? na : sellLvl * (i_zonePct / 100)
+float buyHi   = na(buyLvl)  ? na : buyLvl + zw
+float buyLo   = na(buyLvl)  ? na : buyLvl - zw
+float sellHi  = na(sellLvl) ? na : sellLvl + zw
+float sellLo  = na(sellLvl) ? na : sellLvl - zw
+
+// Draw zones
+var box bBox = na, var box sBox = na
+if not na(buyLo)
+    if not na(bBox)
+        box.delete(bBox)
+    bBox := box.new(bar_index-50, buyHi, bar_index+10, buyLo, color.green, bgcolor=color.new(color.green,80))
+if not na(sellLo)
+    if not na(sBox)
+        box.delete(sBox)
+    sBox := box.new(bar_index-50, sellHi, bar_index+10, sellLo, color.red, bgcolor=color.new(color.red,80))
+
+plot(mid, "Mid", color.new(color.yellow,30), 2)
+
+// ═══════════════════════════════════════════════════════════════
+// ZONE TOUCHES & BOUNCE TRACKING
+// ═══════════════════════════════════════════════════════════════
+
+bool inBuy  = not na(buyLo) and low <= buyHi and close >= buyLo
+bool inSell = not na(sellLo) and high >= sellLo and close <= sellHi
+
+var int bTch = 0, var int sTch = 0
+var int bBnc = 0, var int sBnc = 0
+var bool wasB = false, var bool wasS = false
+
+if ta.change(time("D")) != 0
+    bTch := 0, sTch := 0, bBnc := 0, sBnc := 0
+
+bool buyEntry  = inBuy and not wasB
+bool sellEntry = inSell and not wasS
+
+if buyEntry
+    bTch += 1
+if not inBuy and wasB and close > buyHi
+    bBnc += 1
+if sellEntry
+    sTch += 1
+if not inSell and wasS and close < sellLo
+    sBnc += 1
+
+wasB := inBuy
+wasS := inSell
+
+float bRate = bTch > 0 ? (bBnc / bTch) * 100 : 0
+float sRate = sTch > 0 ? (sBnc / sTch) * 100 : 0
+
+// ═══════════════════════════════════════════════════════════════
+// DELTA APPROXIMATION — Estimated Buy vs Sell Pressure
+// ═══════════════════════════════════════════════════════════════
+
+float clv      = high != low ? ((close - low) - (high - close)) / (high - low) : 0
+float estBuy   = volume * (0.5 + clv * 0.5)
+float estSell  = volume * (0.5 - clv * 0.5)
+float delta    = estBuy - estSell
+float cumDelta = ta.cum(delta)
+float deltaSMA = ta.sma(delta, i_deltaLen)
+
+// ═══════════════════════════════════════════════════════════════
+// ABSORPTION DETECTION
+// ═══════════════════════════════════════════════════════════════
+
+float avgVol    = ta.sma(volume, 50)
+float bodyPct   = high != low ? math.abs(close - open) / (high - low) : 1.0
+bool  volSpike  = volume > avgVol * i_absorbVol
+bool  tinyBody  = bodyPct < 0.3
+
+bool absorbBuy  = volSpike and tinyBody and not na(buyLo) and low <= buyHi and close >= buyLo
+bool absorbSell = volSpike and tinyBody and not na(sellLo) and high >= sellLo and close <= sellHi
+
+// ═══════════════════════════════════════════════════════════════
+// VOLUME PROFILE — Approximate Volume-at-Price
+// ═══════════════════════════════════════════════════════════════
+
+var float[] vpVol     = array.new_float(i_vpRows, 0.0)
+var float[] vpBuyVol  = array.new_float(i_vpRows, 0.0)
+var float[] vpSellVol = array.new_float(i_vpRows, 0.0)
+
+float vpHigh = ta.highest(high, i_vpLen)
+float vpLow  = ta.lowest(low, i_vpLen)
+float vpStep = (vpHigh - vpLow) / i_vpRows
+
+if barstate.islast and i_showVP and vpStep > 0
+    for idx = 0 to i_vpRows - 1
+        array.set(vpVol, idx, 0.0)
+        array.set(vpBuyVol, idx, 0.0)
+        array.set(vpSellVol, idx, 0.0)
+
+    for i = 0 to i_vpLen - 1
+        float bHigh  = high[i]
+        float bLow   = low[i]
+        float bOpen  = open[i]
+        float bClose = close[i]
+        float bVol   = volume[i]
+        bool  bBull  = bClose >= bOpen
+
+        if bVol > 0 and not na(bHigh) and not na(bLow)
+            int rowLo = math.max(0, math.floor((bLow - vpLow) / vpStep))
+            int rowHi = math.min(i_vpRows - 1, math.floor((bHigh - vpLow) / vpStep))
+            int span  = rowHi - rowLo + 1
+
+            if span > 0
+                float bodyTop = math.max(bOpen, bClose)
+                float bodyBot = math.min(bOpen, bClose)
+                int bodyRowLo = math.max(0, math.floor((bodyBot - vpLow) / vpStep))
+                int bodyRowHi = math.min(i_vpRows - 1, math.floor((bodyTop - vpLow) / vpStep))
+                int bodySpan  = bodyRowHi - bodyRowLo + 1
+                int wickSpan  = span - bodySpan
+
+                float bodyShare = bodySpan > 0 ? (bVol * 0.7) / bodySpan : 0
+                float wickShare = wickSpan > 0 ? (bVol * 0.3) / wickSpan : bVol / span
+
+                for row = rowLo to rowHi
+                    bool inBody = row >= bodyRowLo and row <= bodyRowHi
+                    float addVol = inBody ? bodyShare : wickShare
+                    array.set(vpVol, row, array.get(vpVol, row) + addVol)
+                    if bBull
+                        array.set(vpBuyVol, row, array.get(vpBuyVol, row) + addVol)
+                    else
+                        array.set(vpSellVol, row, array.get(vpSellVol, row) + addVol)
+
+var float pocPrice = na
+var float vahPrice = na
+var float valPrice = na
+var float maxVPVol = 0.0
+
+if barstate.islast and i_showVP and vpStep > 0
+    int pocRow = 0
+    float totalVP = 0.0
+    maxVPVol := 0.0
+    for idx = 0 to i_vpRows - 1
+        float rv = array.get(vpVol, idx)
+        totalVP += rv
+        if rv > maxVPVol
+            maxVPVol := rv
+            pocRow := idx
+
+    pocPrice := vpLow + (pocRow + 0.5) * vpStep
+
+    float vaTarget = totalVP * 0.70
+    float vaCum    = array.get(vpVol, pocRow)
+    int vaLo = pocRow
+    int vaHi = pocRow
+
+    while vaCum < vaTarget and (vaLo > 0 or vaHi < i_vpRows - 1)
+        float belowVol = vaLo > 0 ? array.get(vpVol, vaLo - 1) : 0
+        float aboveVol = vaHi < i_vpRows - 1 ? array.get(vpVol, vaHi + 1) : 0
+        if belowVol >= aboveVol and vaLo > 0
+            vaLo -= 1
+            vaCum += belowVol
+        else if vaHi < i_vpRows - 1
+            vaHi += 1
+            vaCum += aboveVol
+        else
+            break
+
+    valPrice := vpLow + vaLo * vpStep
+    vahPrice := vpLow + (vaHi + 1) * vpStep
+
+// Draw Volume Profile bars
+if barstate.islast and i_showVP and vpStep > 0 and maxVPVol > 0
+    for idx = 0 to i_vpRows - 1
+        float rv     = array.get(vpVol, idx)
+        float buyV   = array.get(vpBuyVol, idx)
+        float sellV  = array.get(vpSellVol, idx)
+        float pct    = rv / maxVPVol
+        int   barW   = math.round(pct * i_vpWidth)
+
+        float rowBot = vpLow + idx * vpStep
+        float rowTop = rowBot + vpStep
+
+        bool isPOC   = math.abs(rowBot + vpStep/2 - pocPrice) < vpStep
+        color vpClr  = isPOC ? color.new(color.yellow, 60) : buyV > sellV ? color.new(color.green, 75) : color.new(color.red, 75)
+
+        if barW > 0
+            box.new(bar_index - barW, rowTop, bar_index, rowBot, border_color=color.new(vpClr, 60), bgcolor=vpClr, border_width=0)
+
+// POC line
+var line pocLine = na
+if barstate.islast and i_showPOC and not na(pocPrice)
+    if not na(pocLine)
+        line.delete(pocLine)
+    pocLine := line.new(bar_index - i_vpLen, pocPrice, bar_index + 10, pocPrice, color=color.yellow, width=2, style=line.style_dashed)
+
+// Value Area lines
+var line vahLine = na
+var line valLine = na
+if barstate.islast and i_showVAHL and not na(vahPrice)
+    if not na(vahLine)
+        line.delete(vahLine)
+    vahLine := line.new(bar_index - i_vpLen, vahPrice, bar_index + 10, vahPrice, color=color.new(color.aqua, 30), width=1, style=line.style_dotted)
+if barstate.islast and i_showVAHL and not na(valPrice)
+    if not na(valLine)
+        line.delete(valLine)
+    valLine := line.new(bar_index - i_vpLen, valPrice, bar_index + 10, valPrice, color=color.new(color.aqua, 30), width=1, style=line.style_dotted)
+
+// ═══════════════════════════════════════════════════════════════
+// CANDLE PATTERN DETECTION
+// ═══════════════════════════════════════════════════════════════
+
+float body    = math.abs(close - open)
+float wick    = high - low
+float upWick  = high - math.max(open, close)
+float dnWick  = math.min(open, close) - low
+bool bullish  = close > open
+bool bearish  = close < open
+
+bool hammer    = dnWick > body * 2 and upWick < body * 0.5 and wick > 0
+bool shootStar = upWick > body * 2 and dnWick < body * 0.5 and wick > 0
+bool bullEngulf = bullish and bearish[1] and close > open[1] and open < close[1] and body > body[1]
+bool bearEngulf = bearish and bullish[1] and close < open[1] and open > close[1] and body > body[1]
+bool doji       = body < wick * 0.1 and wick > 0
+bool bullPin    = dnWick > wick * 0.66
+bool bearPin    = upWick > wick * 0.66
+
+// ═══════════════════════════════════════════════════════════════
+// PATTERN + ABSORPTION LABELS
+// ═══════════════════════════════════════════════════════════════
+
+if i_showPat
+    if inBuy and hammer
+        label.new(bar_index, low, "HAMMER", style=label.style_label_up, color=color.green, textcolor=color.white, size=size.tiny)
+    if inBuy and bullEngulf
+        label.new(bar_index, low, "ENGULF", style=label.style_label_up, color=color.green, textcolor=color.white, size=size.tiny)
+    if inBuy and bullPin and not hammer
+        label.new(bar_index, low, "PIN", style=label.style_label_up, color=color.new(color.green,30), textcolor=color.white, size=size.tiny)
+    if inBuy and doji
+        label.new(bar_index, low, "DOJI", style=label.style_label_up, color=color.gray, textcolor=color.white, size=size.tiny)
+
+    if inSell and shootStar
+        label.new(bar_index, high, "STAR", style=label.style_label_down, color=color.red, textcolor=color.white, size=size.tiny)
+    if inSell and bearEngulf
+        label.new(bar_index, high, "ENGULF", style=label.style_label_down, color=color.red, textcolor=color.white, size=size.tiny)
+    if inSell and bearPin and not shootStar
+        label.new(bar_index, high, "PIN", style=label.style_label_down, color=color.new(color.red,30), textcolor=color.white, size=size.tiny)
+    if inSell and doji
+        label.new(bar_index, high, "DOJI", style=label.style_label_down, color=color.gray, textcolor=color.white, size=size.tiny)
+
+if absorbBuy
+    label.new(bar_index, low, "ABSORB", style=label.style_label_up, color=color.new(#00ffff, 0), textcolor=color.black, size=size.small)
+if absorbSell
+    label.new(bar_index, high, "ABSORB", style=label.style_label_down, color=color.new(#ff00ff, 0), textcolor=color.white, size=size.small)
+
+if volSpike and not absorbBuy and not absorbSell
+    label.new(bar_index, bullish ? low : high, "VOL", style=bullish ? label.style_label_up : label.style_label_down, color=color.new(color.white, 50), textcolor=color.black, size=size.tiny)
+
+// ═══════════════════════════════════════════════════════════════
+// ENTRY SIGNALS — 4 tiers
+// ═══════════════════════════════════════════════════════════════
+
+bool basicBuy  = buyEntry and inSess
+bool basicSell = sellEntry and inSess
+
+bool confirmBuy  = inBuy and inSess and (hammer or bullEngulf or bullPin)
+bool confirmSell = inSell and inSess and (shootStar or bearEngulf or bearPin)
+
+bool absConfirmBuy  = confirmBuy and volSpike
+bool absConfirmSell = confirmSell and volSpike
+
+plotshape(basicBuy and not confirmBuy ? low : na, "Zone Buy", shape.triangleup, location.belowbar, color.new(color.green,40), size=size.tiny)
+plotshape(basicSell and not confirmSell ? high : na, "Zone Sell", shape.triangledown, location.abovebar, color.new(color.red,40), size=size.tiny)
+
+plotshape(confirmBuy and not absConfirmBuy ? low : na, "CONFIRMED BUY", shape.labelup, location.belowbar, color.green, size=size.small, text="BUY", textcolor=color.white)
+plotshape(confirmSell and not absConfirmSell ? high : na, "CONFIRMED SELL", shape.labeldown, location.abovebar, color.red, size=size.small, text="SELL", textcolor=color.white)
+
+plotshape(absConfirmBuy ? low : na, "ABS BUY", shape.labelup, location.belowbar, color.new(#00ffff,0), size=size.normal, text="ABS BUY", textcolor=color.black)
+plotshape(absConfirmSell ? high : na, "ABS SELL", shape.labeldown, location.abovebar, color.new(#ff00ff,0), size=size.normal, text="ABS SELL", textcolor=color.white)
+
+// ═══════════════════════════════════════════════════════════════
+// ALERTS
+// ═══════════════════════════════════════════════════════════════
+
+alertcondition(absConfirmBuy, "ABS BUY (Zone+Pattern+Volume)", "ABSORPTION BUY: Zone + Pattern + Volume Spike — HIGHEST conviction")
+alertcondition(absConfirmSell, "ABS SELL (Zone+Pattern+Volume)", "ABSORPTION SELL: Zone + Pattern + Volume Spike — HIGHEST conviction")
+alertcondition(confirmBuy, "CONFIRMED BUY (Zone + Pattern)", "BUY SIGNAL: Buy Zone + bullish candle pattern")
+alertcondition(confirmSell, "CONFIRMED SELL (Zone + Pattern)", "SELL SIGNAL: Sell Zone + bearish candle pattern")
+alertcondition(basicBuy, "Zone Touch: Buy Zone", "Price touched Buy Zone")
+alertcondition(basicSell, "Zone Touch: Sell Zone", "Price touched Sell Zone")
+alertcondition(absorbBuy, "Absorption at Support", "Possible institutional absorption at buy zone")
+alertcondition(absorbSell, "Absorption at Resistance", "Possible institutional absorption at sell zone")
+
+// ═══════════════════════════════════════════════════════════════
+// TRAILING STOP
+// ═══════════════════════════════════════════════════════════════
+
+var float tLong = na, var float tShort = na
+var bool isLong = false, var bool isShort = false
+float tOff = close * (i_trailPct / 100)
+
+if confirmBuy and not isLong
+    isLong := true, isShort := false
+    tLong := close - tOff, tShort := na
+if confirmSell and not isShort
+    isShort := true, isLong := false
+    tShort := close + tOff, tLong := na
+
+if isLong
+    tLong := math.max(nz(tLong), close - tOff)
+    if low < tLong
+        isLong := false, tLong := na
+if isShort
+    tShort := math.min(nz(tShort, 1e18), close + tOff)
+    if high > tShort
+        isShort := false, tShort := na
+
+plot(isLong ? tLong : na, "Trail Long", color.lime, 2, plot.style_steplinebr)
+plot(isShort ? tShort : na, "Trail Short", color.orange, 2, plot.style_steplinebr)
+
+// ═══════════════════════════════════════════════════════════════
+// CANDLE COLORING — delta-enhanced
+// ═══════════════════════════════════════════════════════════════
+
+color barClr = na
+if inBuy
+    barClr := volSpike ? color.new(color.lime, 10) : color.new(color.green, 50)
+else if inSell
+    barClr := volSpike ? color.new(#ff4444, 10) : color.new(color.red, 50)
+else if volSpike
+    barClr := delta > 0 ? color.new(color.green, 30) : color.new(color.red, 30)
+barcolor(barClr)
+
+// ═══════════════════════════════════════════════════════════════
+// RISK MATH
+// ═══════════════════════════════════════════════════════════════
+
+float range_pts  = na(sellLvl) or na(buyLvl) ? na : sellLvl - buyLvl
+float risk_per_lot = na(range_pts) ? na : range_pts * (i_dollarPt / i_lotStep)
+float lots = na(risk_per_lot) or risk_per_lot == 0 ? na : math.floor((i_maxDD / risk_per_lot) / i_lotStep) * i_lotStep
+float riskAmt = na(lots) ? na : lots * range_pts * (i_dollarPt / i_lotStep)
+
+// ═══════════════════════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════════════════════
+
+if i_showTable and barstate.islast
+    var table t = table.new(position.top_right, 2, 22, color.new(#111111,5), color.new(color.gray,60), 1, color.new(color.gray,60), 1)
+
+    table.cell(t, 0, 0, "15s SCALP+VOL", text_color=color.white, text_size=size.normal, bgcolor=color.new(#1a1a2e,0))
+    table.cell(t, 1, 0, syminfo.ticker, text_color=color.aqua, text_size=size.normal, bgcolor=color.new(#1a1a2e,0))
+
+    table.cell(t, 0, 1, "Sell Zone", text_color=color.red, text_size=size.small)
+    table.cell(t, 1, 1, na(sellLvl) ? "--" : str.tostring(sellLvl, format.mintick), text_color=color.red, text_size=size.small)
+    table.cell(t, 0, 2, "Mid", text_color=color.yellow, text_size=size.small)
+    table.cell(t, 1, 2, na(mid) ? "--" : str.tostring(mid, format.mintick), text_color=color.yellow, text_size=size.small)
+    table.cell(t, 0, 3, "Buy Zone", text_color=color.green, text_size=size.small)
+    table.cell(t, 1, 3, na(buyLvl) ? "--" : str.tostring(buyLvl, format.mintick), text_color=color.green, text_size=size.small)
+
+    table.cell(t, 0, 4, "VOLUME", text_color=color.white, text_size=size.small, bgcolor=color.new(color.gray,70))
+    table.cell(t, 1, 4, "PROFILE", text_color=color.white, text_size=size.small, bgcolor=color.new(color.gray,70))
+    table.cell(t, 0, 5, "POC", text_color=color.yellow, text_size=size.small)
+    table.cell(t, 1, 5, na(pocPrice) ? "--" : str.tostring(pocPrice, format.mintick), text_color=color.yellow, text_size=size.small)
+    table.cell(t, 0, 6, "VAH", text_color=color.aqua, text_size=size.small)
+    table.cell(t, 1, 6, na(vahPrice) ? "--" : str.tostring(vahPrice, format.mintick), text_color=color.aqua, text_size=size.small)
+    table.cell(t, 0, 7, "VAL", text_color=color.aqua, text_size=size.small)
+    table.cell(t, 1, 7, na(valPrice) ? "--" : str.tostring(valPrice, format.mintick), text_color=color.aqua, text_size=size.small)
+
+    table.cell(t, 0, 8, "DELTA", text_color=color.white, text_size=size.small, bgcolor=color.new(color.gray,70))
+    table.cell(t, 1, 8, "", bgcolor=color.new(color.gray,70))
+    table.cell(t, 0, 9, "Bar Δ", text_color=delta > 0 ? color.green : color.red, text_size=size.small)
+    table.cell(t, 1, 9, str.tostring(delta, "#.0"), text_color=delta > 0 ? color.green : color.red, text_size=size.small)
+    table.cell(t, 0, 10, "Δ Trend", text_color=deltaSMA > 0 ? color.green : color.red, text_size=size.small)
+    table.cell(t, 1, 10, (deltaSMA > 0 ? "BUYERS" : "SELLERS"), text_color=deltaSMA > 0 ? color.green : color.red, text_size=size.small)
+    table.cell(t, 0, 11, "Vol Spike", text_color=color.white, text_size=size.small)
+    table.cell(t, 1, 11, volSpike ? "YES ×" + str.tostring(volume/avgVol, "#.1") : "no", text_color=volSpike ? color.yellow : color.gray, text_size=size.small)
+
+    table.cell(t, 0, 12, "TOUCHES", text_color=color.white, text_size=size.small, bgcolor=color.new(color.gray,70))
+    table.cell(t, 1, 12, "TODAY", text_color=color.white, text_size=size.small, bgcolor=color.new(color.gray,70))
+    table.cell(t, 0, 13, "Buy", text_color=color.green, text_size=size.small)
+    table.cell(t, 1, 13, str.tostring(bTch) + " (" + str.tostring(bRate,"#") + "% bnc)", text_color=color.green, text_size=size.small)
+    table.cell(t, 0, 14, "Sell", text_color=color.red, text_size=size.small)
+    table.cell(t, 1, 14, str.tostring(sTch) + " (" + str.tostring(sRate,"#") + "% bnc)", text_color=color.red, text_size=size.small)
+
+    table.cell(t, 0, 15, "RISK", text_color=color.white, text_size=size.small, bgcolor=color.new(color.gray,70))
+    table.cell(t, 1, 15, "", bgcolor=color.new(color.gray,70))
+    table.cell(t, 0, 16, "Range", text_color=color.silver, text_size=size.small)
+    table.cell(t, 1, 16, na(range_pts) ? "--" : str.tostring(range_pts, "#.##") + " pts", text_color=color.silver, text_size=size.small)
+    table.cell(t, 0, 17, "Lot Size", text_color=color.aqua, text_size=size.small)
+    table.cell(t, 1, 17, na(lots) ? "--" : str.tostring(lots, "#.##"), text_color=color.aqua, text_size=size.small)
+    table.cell(t, 0, 18, "Risk $", text_color=color.orange, text_size=size.small)
+    table.cell(t, 1, 18, na(riskAmt) ? "--" : "$" + str.tostring(riskAmt, "#.00"), text_color=color.orange, text_size=size.small)
+
+    table.cell(t, 0, 19, "SIGNALS", text_color=color.white, text_size=size.small, bgcolor=color.new(color.gray,70))
+    table.cell(t, 1, 19, "RANKED", text_color=color.white, text_size=size.small, bgcolor=color.new(color.gray,70))
+    table.cell(t, 0, 20, "ABS BUY/SELL", text_color=color.new(#00ffff,0), text_size=size.tiny)
+    table.cell(t, 1, 20, "Zone+Pattern+VolSpike #1", text_color=color.gray, text_size=size.tiny)
+    table.cell(t, 0, 21, "CONFIRMED", text_color=color.green, text_size=size.tiny)
+    table.cell(t, 1, 21, "Zone+Pattern #2", text_color=color.gray, text_size=size.tiny)

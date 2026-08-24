@@ -134,6 +134,7 @@
   <div class="tab" data-tab="config">Config</div>
   <div class="tab" data-tab="reports">Reports</div>
   <div class="tab" data-tab="reconciliation">Reconciliation</div>
+  <div class="tab" data-tab="pokemon" style="color:var(--yellow);">Pokemon TCG</div>
 </div>
 
 <!-- ═══════════════ OVERVIEW TAB ═══════════════ -->
@@ -573,6 +574,231 @@
   </div>
 </div>
 
+<!-- ═══════════════ POKEMON TCG TAB ═══════════════ -->
+<div class="tab-panel" id="tab-pokemon">
+  <div class="grid">
+
+    <!-- Portfolio Summary -->
+    <div class="card">
+      <h2>Portfolio Value</h2>
+      <div class="gauge-container">
+        <div class="gauge-value" id="pkmn-total-value" style="color:var(--yellow);">$0.00</div>
+        <div class="gauge-sublabel">Total Market Value</div>
+      </div>
+      <div class="metric"><span class="label">Total Cost Basis</span><span class="value" id="pkmn-total-cost">--</span></div>
+      <div class="metric"><span class="label">Gain / Loss</span><span class="value" id="pkmn-gain-loss">--</span></div>
+      <div class="metric"><span class="label">ROI</span><span class="value" id="pkmn-roi">--</span></div>
+    </div>
+
+    <div class="card">
+      <h2>Collection Stats</h2>
+      <div class="metric"><span class="label">Total Cards</span><span class="value" id="pkmn-card-count">--</span></div>
+      <div class="metric"><span class="label">Unique Cards</span><span class="value" id="pkmn-unique">--</span></div>
+      <div class="metric"><span class="label">Avg Card Value</span><span class="value" id="pkmn-avg-value">--</span></div>
+      <div class="metric"><span class="label">Top Gainer</span><span class="value positive" id="pkmn-top-gainer">--</span></div>
+      <div style="margin-top:12px;">
+        <button class="btn btn-primary btn-sm" onclick="refreshPokemonPrices()" id="pkmn-refresh-btn">Refresh Prices</button>
+        <span id="pkmn-refresh-status" style="color:var(--muted);font-size:11px;margin-left:8px;"></span>
+      </div>
+    </div>
+
+    <!-- Add Card Form -->
+    <div class="card">
+      <h2>Add Card to Portfolio</h2>
+      <div id="pkmn-add-alert"></div>
+      <div class="form-group" style="position:relative;">
+        <label>Search Card</label>
+        <input type="text" id="pkmn-search" placeholder="e.g. Charizard, Umbreon VMAX..." oninput="pokemonSearchDebounced()">
+        <div id="pkmn-search-results" style="position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:0 0 6px 6px;max-height:200px;overflow-y:auto;z-index:50;display:none;"></div>
+      </div>
+      <div id="pkmn-selected-card" style="display:none;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <img id="pkmn-sel-img" style="width:40px;height:56px;border-radius:4px;object-fit:cover;" src="">
+          <div>
+            <div id="pkmn-sel-name" style="font-weight:600;"></div>
+            <div id="pkmn-sel-set" style="font-size:11px;color:var(--muted);"></div>
+            <div id="pkmn-sel-price" style="font-size:11px;color:var(--yellow);"></div>
+          </div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Condition / Grade</label>
+          <select id="pkmn-condition">
+            <option value="Near Mint">Raw - Near Mint</option>
+            <option value="Lightly Played">Raw - Lightly Played</option>
+            <option value="Moderately Played">Raw - Moderately Played</option>
+            <option value="PSA 10">PSA 10 (Gem Mint)</option>
+            <option value="PSA 9">PSA 9 (Mint)</option>
+            <option value="PSA 8">PSA 8 (NM-MT)</option>
+            <option value="BGS 9.5">BGS 9.5 (Gem Mint)</option>
+            <option value="BGS 10">BGS 10 (Pristine)</option>
+            <option value="CGC 10">CGC 10 (Perfect)</option>
+            <option value="CGC 9.5">CGC 9.5 (Gem Mint)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Quantity</label>
+          <input type="number" id="pkmn-qty" value="1" min="1">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Acquired Price ($)</label>
+          <input type="number" step="0.01" id="pkmn-cost" placeholder="e.g. 25.00">
+        </div>
+        <div class="form-group">
+          <label>Acquired Source</label>
+          <select id="pkmn-source">
+            <option value="TCGPlayer">TCGPlayer</option>
+            <option value="eBay">eBay</option>
+            <option value="Local Card Shop">Local Card Shop</option>
+            <option value="Pack Pull">Pack Pull</option>
+            <option value="Garage Sale">Garage Sale</option>
+            <option value="Facebook Group">Facebook Group</option>
+            <option value="Japanese Import">Japanese Import</option>
+            <option value="Trade">Trade</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Notes</label>
+        <input type="text" id="pkmn-notes" placeholder="Optional notes...">
+      </div>
+      <button class="btn btn-primary" onclick="addPokemonCard()">Add to Portfolio</button>
+    </div>
+
+    <!-- Portfolio Table -->
+    <div class="card wide">
+      <h2>Portfolio</h2>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th></th><th>Card</th><th>Set</th><th>Condition</th><th>Qty</th>
+              <th>Cost</th><th>Value</th><th>Gain/Loss</th><th>%</th><th>Source</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="pkmn-portfolio-body">
+            <tr><td colspan="11" style="color:var(--muted);">No cards yet. Add your first card above.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Top Movers -->
+    <div class="card">
+      <h2>Top Gainers (7d)</h2>
+      <table>
+        <thead><tr><th>Card</th><th>Price</th><th>Change</th></tr></thead>
+        <tbody id="pkmn-gainers-body"><tr><td colspan="3" style="color:var(--muted)">No data</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Top Losers (7d)</h2>
+      <table>
+        <thead><tr><th>Card</th><th>Price</th><th>Change</th></tr></thead>
+        <tbody id="pkmn-losers-body"><tr><td colspan="3" style="color:var(--muted)">No data</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- Watchlist -->
+    <div class="card wide">
+      <h2>Watchlist</h2>
+      <div style="margin-bottom:12px;display:flex;gap:8px;align-items:flex-end;">
+        <div class="form-group" style="margin:0;flex:1;"><label>Card Name</label><input type="text" id="wl-name" placeholder="Card name"></div>
+        <div class="form-group" style="margin:0;flex:1;"><label>Set</label><input type="text" id="wl-set" placeholder="Set name"></div>
+        <div class="form-group" style="margin:0;width:120px;"><label>Target Price</label><input type="number" step="0.01" id="wl-target" placeholder="$0.00"></div>
+        <button class="btn btn-primary btn-sm" onclick="addWatchlistItem()" style="height:35px;">Add</button>
+      </div>
+      <table>
+        <thead><tr><th>Card</th><th>Set</th><th>Target</th><th>Current</th><th>Gap</th><th></th></tr></thead>
+        <tbody id="pkmn-watchlist-body"><tr><td colspan="6" style="color:var(--muted)">No watchlist items</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- Data Sources -->
+    <div class="card">
+      <h2>Price Data Sources</h2>
+      <div class="metric"><span class="label"><span style="color:var(--green);">&#9679;</span> pokemontcg.io</span><span class="value" style="font-size:11px;color:var(--muted);">Free API - Cards + Prices</span></div>
+      <div class="metric"><span class="label"><span style="color:var(--yellow);">&#9679;</span> TCGPlayer</span><span class="value" style="font-size:11px;color:var(--muted);">Market Prices (API key)</span></div>
+      <div class="metric"><span class="label"><span style="color:var(--yellow);">&#9679;</span> PriceCharting</span><span class="value" style="font-size:11px;color:var(--muted);">Historical Charts ($10/mo)</span></div>
+      <div class="metric"><span class="label"><span style="color:var(--yellow);">&#9679;</span> eBay Browse API</span><span class="value" style="font-size:11px;color:var(--muted);">Real Sold Data (free)</span></div>
+      <div class="metric"><span class="label"><span style="color:var(--muted);">&#9679;</span> PSA Pop Reports</span><span class="value" style="font-size:11px;color:var(--muted);">Manual - Grading Scarcity</span></div>
+      <div class="metric"><span class="label"><span style="color:var(--muted);">&#9679;</span> Cardmarket (EU)</span><span class="value" style="font-size:11px;color:var(--muted);">Manual - EUR Prices</span></div>
+      <div class="metric"><span class="label"><span style="color:var(--muted);">&#9679;</span> Yahoo Auctions JP</span><span class="value" style="font-size:11px;color:var(--muted);">Manual - Japanese Market</span></div>
+    </div>
+
+    <!-- Marketplaces -->
+    <div class="card">
+      <h2>Where to Buy & Sell</h2>
+      <div class="metric"><span class="label">TCGPlayer</span><span class="value" style="font-size:11px;color:var(--accent);">Largest US marketplace</span></div>
+      <div class="metric"><span class="label">eBay</span><span class="value" style="font-size:11px;color:var(--accent);">Auctions + Buy It Now</span></div>
+      <div class="metric"><span class="label">Cardmarket</span><span class="value" style="font-size:11px;color:var(--accent);">Largest EU marketplace</span></div>
+      <div class="metric"><span class="label">Troll and Toad</span><span class="value" style="font-size:11px;color:var(--accent);">Bulk + Singles</span></div>
+      <div class="metric"><span class="label">Facebook Groups</span><span class="value" style="font-size:11px;color:var(--accent);">Direct seller, no fees</span></div>
+      <div class="metric"><span class="label">Local Card Shops</span><span class="value" style="font-size:11px;color:var(--accent);">Negotiate + no shipping</span></div>
+      <div class="metric"><span class="label">Buyee / Mercari JP</span><span class="value" style="font-size:11px;color:var(--accent);">Japanese cards 30-50% cheaper</span></div>
+      <div class="metric"><span class="label">Pokemon Center</span><span class="value" style="font-size:11px;color:var(--accent);">MSRP sealed product</span></div>
+    </div>
+
+    <!-- Acquisition Strategies -->
+    <div class="card wide">
+      <h2>Acquisition Strategies</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div>
+          <div style="padding:8px 0;border-bottom:1px solid var(--border);">
+            <div style="color:var(--accent);font-weight:600;font-size:12px;">Local Card Shops (10-30% below market)</div>
+            <div style="color:var(--muted);font-size:11px;margin-top:2px;">Build relationships. Buy collections they don't want to sort. Many LCS price below TCGPlayer mid.</div>
+          </div>
+          <div style="padding:8px 0;border-bottom:1px solid var(--border);">
+            <div style="color:var(--accent);font-weight:600;font-size:12px;">Garage Sales / Estate Sales (50-90% below)</div>
+            <div style="color:var(--muted);font-size:11px;margin-top:2px;">EstateSales.net, Craigslist, FB Marketplace. Most sellers don't know modern values.</div>
+          </div>
+          <div style="padding:8px 0;border-bottom:1px solid var(--border);">
+            <div style="color:var(--accent);font-weight:600;font-size:12px;">eBay Bulk Lots (30-70% below)</div>
+            <div style="color:var(--muted);font-size:11px;margin-top:2px;">Search "pokemon card lot" sorted by newly listed + auction. Bid on unsorted estate lots.</div>
+          </div>
+          <div style="padding:8px 0;">
+            <div style="color:var(--accent);font-weight:600;font-size:12px;">Facebook Buy/Sell/Trade Groups (10-20% below)</div>
+            <div style="color:var(--muted);font-size:11px;margin-top:2px;">Direct seller = no platform fees = lower prices. Join Pokemon TCG BST groups.</div>
+          </div>
+        </div>
+        <div>
+          <div style="padding:8px 0;border-bottom:1px solid var(--border);">
+            <div style="color:var(--yellow);font-weight:600;font-size:12px;">Japanese Import (30-50% cheaper)</div>
+            <div style="color:var(--muted);font-size:11px;margin-top:2px;">Buy via Buyee (Yahoo Auctions JP), Mercari JP, Amazon JP. JP alt arts often much cheaper before English reprint.</div>
+          </div>
+          <div style="padding:8px 0;border-bottom:1px solid var(--border);">
+            <div style="color:var(--yellow);font-weight:600;font-size:12px;">PSA Grading Arbitrage (2-5x premium)</div>
+            <div style="color:var(--muted);font-size:11px;margin-top:2px;">Buy raw NM at raw price, grade PSA 10, sell at 2-5x. Cost: $20-30/card. Success rate: ~30-40% grade 10.</div>
+          </div>
+          <div style="padding:8px 0;border-bottom:1px solid var(--border);">
+            <div style="color:var(--yellow);font-weight:600;font-size:12px;">Sealed Product Hold (10-30% annual)</div>
+            <div style="color:var(--muted);font-size:11px;margin-top:2px;">Out-of-print booster boxes appreciate steadily. Key sets: Evolving Skies, VSTAR Universe (JP), Prismatic Evolutions.</div>
+          </div>
+          <div style="padding:8px 0;">
+            <div style="color:var(--yellow);font-weight:600;font-size:12px;">Pre-Release Events (variable edge)</div>
+            <div style="color:var(--muted);font-size:11px;margin-top:2px;">Attend local pre-release tournaments. Get early access before full release price discovery. Sell chase pulls immediately.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Upcoming Sets -->
+    <div class="card wide">
+      <h2>Recent & Upcoming Sets</h2>
+      <table>
+        <thead><tr><th>Set</th><th>Series</th><th>Cards</th><th>Release Date</th></tr></thead>
+        <tbody id="pkmn-sets-body"><tr><td colspan="4" style="color:var(--muted)">Loading...</td></tr></tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
 <div class="footer">Auto-refreshes every 15s | LaT-PFN Automated Futures Trading</div>
 
 <script>
@@ -606,6 +832,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     if(tab.dataset.tab === 'performance') { refreshPerformance(); refreshDailyHistory(); refreshInstruments(); }
     if(tab.dataset.tab === 'broker') refreshBrokerPerformance();
     if(tab.dataset.tab === 'config') refreshConfig();
+    if(tab.dataset.tab === 'pokemon') refreshPokemon();
   });
 });
 
@@ -1701,6 +1928,272 @@ refreshBrokerPerformance();
 refreshConfig();
 setInterval(refreshAll, 15000);
 setInterval(refreshBrokerPerformance, 60000);  // broker data less frequent
+
+// ── Pokemon TCG ─────────────────────────────────────────────────────
+
+let _pkmnSearchTimeout = null;
+let _pkmnSelectedCard = null;
+
+function pokemonSearchDebounced() {
+  clearTimeout(_pkmnSearchTimeout);
+  _pkmnSearchTimeout = setTimeout(pokemonSearch, 300);
+}
+
+async function pokemonSearch() {
+  const q = $('pkmn-search').value.trim();
+  const resultsDiv = $('pkmn-search-results');
+  if (q.length < 2) { resultsDiv.style.display = 'none'; return; }
+
+  const d = await fetchJSON('/api/pokemon/search?q=' + encodeURIComponent(q));
+  if (!d || !d.cards || d.cards.length === 0) {
+    resultsDiv.innerHTML = '<div style="padding:8px 12px;color:var(--muted);font-size:12px;">No results</div>';
+    resultsDiv.style.display = 'block';
+    return;
+  }
+
+  resultsDiv.innerHTML = d.cards.slice(0, 10).map(c => `
+    <div style="padding:6px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);font-size:12px;"
+         onmouseover="this.style.background='rgba(88,166,255,0.05)'"
+         onmouseout="this.style.background=''"
+         onclick='selectPokemonCard(${JSON.stringify(c).replace(/'/g, "&#39;")})'>
+      ${c.image_small ? `<img src="${c.image_small}" style="width:28px;height:40px;border-radius:3px;object-fit:cover;">` : ''}
+      <div style="flex:1;">
+        <div style="font-weight:600;">${c.name}</div>
+        <div style="color:var(--muted);font-size:11px;">${c.set_name} #${c.number} ${c.rarity || ''}</div>
+      </div>
+      <div style="color:var(--yellow);font-weight:600;">${c.market_price ? '$' + c.market_price.toFixed(2) : '--'}</div>
+    </div>
+  `).join('');
+  resultsDiv.style.display = 'block';
+}
+
+function selectPokemonCard(card) {
+  _pkmnSelectedCard = card;
+  $('pkmn-search-results').style.display = 'none';
+  $('pkmn-search').value = card.name;
+  $('pkmn-selected-card').style.display = 'block';
+  $('pkmn-sel-img').src = card.image_small || '';
+  $('pkmn-sel-name').textContent = card.name;
+  $('pkmn-sel-set').textContent = `${card.set_name} #${card.number} - ${card.rarity || 'Unknown'}`;
+  $('pkmn-sel-price').textContent = card.market_price ? `Market: $${card.market_price.toFixed(2)}` : 'No price data';
+}
+
+async function addPokemonCard() {
+  const alertDiv = $('pkmn-add-alert');
+  if (!_pkmnSelectedCard && !$('pkmn-search').value.trim()) {
+    alertDiv.innerHTML = '<div class="alert alert-error">Search and select a card first</div>';
+    return;
+  }
+
+  const condVal = $('pkmn-condition').value;
+  const gradeService = condVal.startsWith('PSA') ? 'PSA' : condVal.startsWith('BGS') ? 'BGS' : condVal.startsWith('CGC') ? 'CGC' : 'RAW';
+  const gradeNum = condVal.match(/\d+\.?\d*/);
+
+  const data = {
+    name: _pkmnSelectedCard ? _pkmnSelectedCard.name : $('pkmn-search').value.trim(),
+    set_name: _pkmnSelectedCard ? _pkmnSelectedCard.set_name : '',
+    set_code: _pkmnSelectedCard ? _pkmnSelectedCard.set_code : '',
+    card_number: _pkmnSelectedCard ? _pkmnSelectedCard.number : '',
+    rarity: _pkmnSelectedCard ? _pkmnSelectedCard.rarity : '',
+    image_url: _pkmnSelectedCard ? _pkmnSelectedCard.image_small : '',
+    pokemontcg_id: _pkmnSelectedCard ? _pkmnSelectedCard.id : '',
+    tcgplayer_id: '',
+    condition_grade: condVal,
+    grade_service: gradeService,
+    grade_value: gradeNum ? parseFloat(gradeNum[0]) : null,
+    acquired_price: parseFloat($('pkmn-cost').value) || 0,
+    acquired_source: $('pkmn-source').value,
+    quantity: parseInt($('pkmn-qty').value) || 1,
+    notes: $('pkmn-notes').value,
+    current_price: _pkmnSelectedCard ? _pkmnSelectedCard.market_price : null,
+  };
+
+  const resp = await fetch('/api/pokemon/card', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(data),
+  });
+
+  if (resp.ok) {
+    alertDiv.innerHTML = '<div class="alert alert-success">Card added to portfolio!</div>';
+    _pkmnSelectedCard = null;
+    $('pkmn-search').value = '';
+    $('pkmn-selected-card').style.display = 'none';
+    $('pkmn-cost').value = '';
+    $('pkmn-notes').value = '';
+    $('pkmn-qty').value = '1';
+    setTimeout(() => alertDiv.innerHTML = '', 3000);
+    refreshPokemonPortfolio();
+    refreshPokemonSummary();
+  } else {
+    alertDiv.innerHTML = '<div class="alert alert-error">Failed to add card</div>';
+  }
+}
+
+async function deletePokemonCard(id) {
+  if (!confirm('Remove this card from portfolio?')) return;
+  await fetch(`/api/pokemon/card/${id}`, {method: 'DELETE'});
+  refreshPokemonPortfolio();
+  refreshPokemonSummary();
+}
+
+async function refreshPokemon() {
+  await Promise.all([
+    refreshPokemonSummary(),
+    refreshPokemonPortfolio(),
+    refreshPokemonMovers(),
+    refreshPokemonWatchlist(),
+    refreshPokemonSets(),
+  ]);
+}
+
+async function refreshPokemonSummary() {
+  const d = await fetchJSON('/api/pokemon/portfolio/summary');
+  if (!d) return;
+  $('pkmn-total-value').textContent = '$' + (d.total_value || 0).toLocaleString('en-US', {minimumFractionDigits: 2});
+  $('pkmn-total-cost').textContent = '$' + (d.total_cost || 0).toLocaleString('en-US', {minimumFractionDigits: 2});
+  const gl = d.gain_loss || 0;
+  $('pkmn-gain-loss').textContent = (gl >= 0 ? '+$' : '-$') + Math.abs(gl).toLocaleString('en-US', {minimumFractionDigits: 2});
+  $('pkmn-gain-loss').className = 'value ' + pnlClass(gl);
+  $('pkmn-roi').textContent = (d.roi_pct || 0).toFixed(1) + '%';
+  $('pkmn-roi').className = 'value ' + pnlClass(d.roi_pct);
+  $('pkmn-card-count').textContent = d.card_count || 0;
+  $('pkmn-unique').textContent = d.unique_cards || 0;
+  $('pkmn-avg-value').textContent = '$' + (d.avg_card_value || 0).toFixed(2);
+  if (d.top_gainer) {
+    $('pkmn-top-gainer').textContent = `${d.top_gainer} (+${d.top_gainer_pct}%)`;
+  }
+}
+
+async function refreshPokemonPortfolio() {
+  const cards = await fetchJSON('/api/pokemon/portfolio');
+  if (!cards) return;
+  const tbody = $('pkmn-portfolio-body');
+  if (cards.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="11" style="color:var(--muted);">No cards yet. Add your first card above.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = cards.map(c => {
+    const qty = c.quantity || 1;
+    const cost = (c.acquired_price || 0) * qty;
+    const value = (c.current_price || c.acquired_price || 0) * qty;
+    const gl = value - cost;
+    const glPct = cost > 0 ? ((gl / cost) * 100).toFixed(1) : '0.0';
+    return `<tr>
+      <td>${c.image_url ? `<img src="${c.image_url}" style="width:32px;height:45px;border-radius:3px;object-fit:cover;">` : ''}</td>
+      <td style="font-weight:600;">${c.name}</td>
+      <td style="color:var(--muted);font-size:11px;">${c.set_name || ''}</td>
+      <td><span class="badge ${c.grade_service !== 'RAW' ? 'long' : ''}" style="font-size:10px;">${c.condition_grade}</span></td>
+      <td>${qty}</td>
+      <td>$${cost.toFixed(2)}</td>
+      <td>$${value.toFixed(2)}</td>
+      <td class="${pnlClass(gl)}">${gl >= 0 ? '+' : ''}$${gl.toFixed(2)}</td>
+      <td class="${pnlClass(gl)}">${glPct}%</td>
+      <td style="color:var(--muted);font-size:11px;">${c.acquired_source || ''}</td>
+      <td><button class="btn btn-danger btn-sm" onclick="deletePokemonCard(${c.id})">x</button></td>
+    </tr>`;
+  }).join('');
+}
+
+async function refreshPokemonMovers() {
+  const d = await fetchJSON('/api/pokemon/movers?days=7');
+  if (!d) return;
+
+  const renderMovers = (items, tbodyId) => {
+    const tbody = $(tbodyId);
+    if (!items || items.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="3" style="color:var(--muted)">No data yet</td></tr>';
+      return;
+    }
+    tbody.innerHTML = items.map(m => `<tr>
+      <td style="font-weight:600;font-size:11px;">${m.name}<br><span style="color:var(--muted);font-size:10px;">${m.set_name || ''}</span></td>
+      <td>$${m.current_price.toFixed(2)}</td>
+      <td class="${pnlClass(m.change_pct)}">${m.change_pct > 0 ? '+' : ''}${m.change_pct}%</td>
+    </tr>`).join('');
+  };
+
+  renderMovers(d.gainers, 'pkmn-gainers-body');
+  renderMovers(d.losers, 'pkmn-losers-body');
+}
+
+async function refreshPokemonWatchlist() {
+  const items = await fetchJSON('/api/pokemon/watchlist');
+  if (!items) return;
+  const tbody = $('pkmn-watchlist-body');
+  if (items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted)">No watchlist items. Add cards to watch above.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map(w => {
+    const gap = w.target_buy_price && w.current_price ? ((w.current_price - w.target_buy_price) / w.target_buy_price * 100).toFixed(1) : '--';
+    const gapClass = gap !== '--' ? pnlClass(-parseFloat(gap)) : '';
+    return `<tr>
+      <td style="font-weight:600;">${w.name}</td>
+      <td style="color:var(--muted);font-size:11px;">${w.set_name || ''}</td>
+      <td>$${(w.target_buy_price || 0).toFixed(2)}</td>
+      <td>${w.current_price ? '$' + w.current_price.toFixed(2) : '--'}</td>
+      <td class="${gapClass}">${gap !== '--' ? gap + '%' : '--'}</td>
+      <td><button class="btn btn-danger btn-sm" onclick="removeWatchlistItem(${w.id})">x</button></td>
+    </tr>`;
+  }).join('');
+}
+
+async function addWatchlistItem() {
+  const name = $('wl-name').value.trim();
+  if (!name) return;
+  await fetch('/api/pokemon/watchlist', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      name: name,
+      set_name: $('wl-set').value.trim(),
+      target_buy_price: parseFloat($('wl-target').value) || 0,
+    }),
+  });
+  $('wl-name').value = '';
+  $('wl-set').value = '';
+  $('wl-target').value = '';
+  refreshPokemonWatchlist();
+}
+
+async function removeWatchlistItem(id) {
+  await fetch(`/api/pokemon/watchlist/${id}`, {method: 'DELETE'});
+  refreshPokemonWatchlist();
+}
+
+async function refreshPokemonPrices() {
+  $('pkmn-refresh-btn').disabled = true;
+  $('pkmn-refresh-status').textContent = 'Refreshing...';
+  const d = await fetch('/api/pokemon/prices/refresh', {method: 'POST'}).then(r => r.json()).catch(() => null);
+  $('pkmn-refresh-btn').disabled = false;
+  if (d) {
+    $('pkmn-refresh-status').textContent = `Updated ${d.updated} cards (${d.errors} errors)`;
+    refreshPokemonPortfolio();
+    refreshPokemonSummary();
+  } else {
+    $('pkmn-refresh-status').textContent = 'Refresh failed';
+  }
+  setTimeout(() => $('pkmn-refresh-status').textContent = '', 5000);
+}
+
+async function refreshPokemonSets() {
+  const sets = await fetchJSON('/api/pokemon/sets');
+  if (!sets || sets.length === 0) return;
+  $('pkmn-sets-body').innerHTML = sets.slice(0, 15).map(s => `<tr>
+    <td style="font-weight:600;">${s.name}</td>
+    <td style="color:var(--muted);font-size:11px;">${s.series}</td>
+    <td>${s.total}</td>
+    <td>${s.release_date || '--'}</td>
+  </tr>`).join('');
+}
+
+// Close search results when clicking outside
+document.addEventListener('click', e => {
+  if (!e.target.closest('#pkmn-search') && !e.target.closest('#pkmn-search-results')) {
+    $('pkmn-search-results').style.display = 'none';
+  }
+});
+
 </script>
 </body>
 </html>

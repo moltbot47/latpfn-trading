@@ -47,6 +47,9 @@ export const metadata: Metadata = {
     title: "LaT-PFN Signals | AI Trading Forecasts",
     description: "Zero-shot AI forecasting for micro futures. Verified on-chain via Base L2.",
   },
+  other: {
+    "base:app_id": "69bdcb638e5d199fe635fb24",
+  },
 };
 
 export default function RootLayout({

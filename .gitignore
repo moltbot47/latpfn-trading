@@ -33,3 +33,15 @@ htmlcov/
 
 # Data directory (local runtime data)
 data/
+
+# Hardhat / Solidity
+node_modules/
+artifacts/
+cache/
+typechain-types/
+deployments/
+
+# Next.js frontend
+frontend/.next/
+frontend/node_modules/
+frontend/out/

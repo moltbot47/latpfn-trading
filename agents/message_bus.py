@@ -29,6 +29,7 @@ class MessageType(Enum):
     # Bidirectional feedback (Layer 2)
     PERF_FEEDBACK = "perf_feedback"        # per-trade WR feedback (turbo → HL, HL → turbo)
     POSITION_ACTION = "position_action"    # position manager actions (closes, trailing stops)
+    CARD_MARKET_INTEL = "card_market_intel"  # Pokemon card price movements (Pika agent)
 
 
 @dataclass

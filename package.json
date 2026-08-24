@@ -1,0 +1,29 @@
+{
+  "name": "latpfn-trading",
+  "version": "1.0.0",
+  "description": "Automated futures trading using **LaT-PFN zero-shot time-series forecasting**. Predicts price movements on micro futures and executes via TradersPost webhooks to prop firm accounts.",
+  "main": "hardhat.config.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moltbot47/latpfn-trading.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/moltbot47/latpfn-trading/issues"
+  },
+  "homepage": "https://github.com/moltbot47/latpfn-trading#readme",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^6.1.2",
+    "dotenv": "^17.3.1",
+    "hardhat": "^2.28.6"
+  }
+}

@@ -1,125 +1,80 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { createChart, ColorType, CandlestickSeries } from "lightweight-charts";
+import { useEffect, useRef, memo } from "react";
 
-import type { Time } from "lightweight-charts";
-
-interface CandleData {
-  time: Time;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-}
+// Free TradingView widget doesn't include CME futures data.
+// Use ETF/index equivalents that track the same underlying.
+const SYMBOL_MAP: Record<string, string> = {
+  MNQ: "NASDAQ:QQQ",      // Tracks Nasdaq 100 (same as MNQ/NQ)
+  MYM: "AMEX:DIA",        // Tracks Dow Jones (same as MYM/YM)
+  MES: "AMEX:SPY",        // Tracks S&P 500 (same as MES/ES)
+  MBT: "COINBASE:BTCUSD", // Bitcoin (same underlying as MBT)
+};
 
 interface TVChartProps {
   symbol?: string;
-  data?: CandleData[];
+  interval?: string;
 }
 
-export default function TVChart({ symbol = "MNQ", data }: TVChartProps) {
+function TVChartInner({ symbol = "MNQ", interval = "5" }: TVChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<any>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const chart = createChart(containerRef.current, {
-      layout: {
-        background: { type: ColorType.Solid, color: "#131722" },
-        textColor: "#787B86",
-        fontSize: 11,
-      },
-      grid: {
-        vertLines: { color: "rgba(42, 46, 57, 0.6)" },
-        horzLines: { color: "rgba(42, 46, 57, 0.6)" },
-      },
-      crosshair: {
-        vertLine: { color: "#758696", width: 1, style: 3 },
-        horzLine: { color: "#758696", width: 1, style: 3 },
-      },
-      rightPriceScale: {
-        borderColor: "#363A45",
-      },
-      timeScale: {
-        borderColor: "#363A45",
-        timeVisible: true,
-        secondsVisible: false,
-      },
-    });
+    const tvSymbol = SYMBOL_MAP[symbol] || `CME_MINI:${symbol}1!`;
 
-    const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: "#26A69A",
-      downColor: "#EF5350",
-      borderUpColor: "#26A69A",
-      borderDownColor: "#EF5350",
-      wickUpColor: "#26A69A",
-      wickDownColor: "#EF5350",
-    });
-
-    // Use provided data or generate sample
-    if (data && data.length > 0) {
-      candleSeries.setData(data);
-    } else {
-      // Generate realistic sample data
-      const sampleData = generateSampleData(symbol);
-      candleSeries.setData(sampleData);
-    }
-
-    chart.timeScale().fitContent();
-    chartRef.current = chart;
-
-    const handleResize = () => {
-      if (containerRef.current) {
-        chart.applyOptions({
-          width: containerRef.current.clientWidth,
-          height: containerRef.current.clientHeight,
-        });
-      }
+    const widgetConfig = {
+      autosize: true,
+      symbol: tvSymbol,
+      interval: interval,
+      timezone: "America/New_York",
+      theme: "dark",
+      style: "1",
+      locale: "en",
+      backgroundColor: "rgba(19, 23, 34, 1)",
+      gridColor: "rgba(42, 46, 57, 0.6)",
+      hide_top_toolbar: false,
+      hide_side_toolbar: false,
+      allow_symbol_change: false,
+      save_image: false,
+      calendar: false,
+      details: false,
+      hotlist: false,
+      show_popup_button: false,
+      support_host: "https://www.tradingview.com",
     };
 
-    const observer = new ResizeObserver(handleResize);
-    observer.observe(containerRef.current);
+    const script = document.createElement("script");
+    script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
+    script.type = "text/javascript";
+    script.async = true;
+    script.innerHTML = JSON.stringify(widgetConfig);
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "tradingview-widget-container__widget";
+    wrapper.style.height = "100%";
+    wrapper.style.width = "100%";
+
+    const container = containerRef.current;
+    container.innerHTML = "";
+    container.appendChild(wrapper);
+    container.appendChild(script);
 
     return () => {
-      observer.disconnect();
-      chart.remove();
+      container.innerHTML = "";
     };
-  }, [symbol, data]);
+  }, [symbol, interval]);
 
-  return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;
+  return (
+    <div
+      ref={containerRef}
+      className="tradingview-widget-container"
+      style={{ width: "100%", height: "100%" }}
+    />
+  );
 }
 
-function generateSampleData(symbol: string): CandleData[] {
-  const basePrice =
-    symbol === "MNQ" ? 20500 :
-    symbol === "MYM" ? 42000 :
-    symbol === "MES" ? 5800 :
-    symbol === "MBT" ? 68000 : 20000;
-
-  const data: CandleData[] = [];
-  let price = basePrice;
-  const now = new Date();
-
-  for (let i = 200; i >= 0; i--) {
-    const date = new Date(now.getTime() - i * 5 * 60000);
-    const volatility = basePrice * 0.001;
-    const change = (Math.random() - 0.48) * volatility;
-    const open = price;
-    const close = price + change;
-    const high = Math.max(open, close) + Math.random() * volatility * 0.5;
-    const low = Math.min(open, close) - Math.random() * volatility * 0.5;
-    price = close;
-
-    data.push({
-      time: Math.floor(date.getTime() / 1000) as Time,
-      open: Math.round(open * 100) / 100,
-      high: Math.round(high * 100) / 100,
-      low: Math.round(low * 100) / 100,
-      close: Math.round(close * 100) / 100,
-    });
-  }
-
-  return data;
-}
+// Memo with key-based re-mount from parent — prevents unnecessary re-renders
+const TVChart = memo(TVChartInner);
+export default TVChart;

@@ -1,0 +1,11 @@
+{
+  "frame": {
+    "version": "1",
+    "name": "LaT-PFN Signals",
+    "iconUrl": "https://latpfn.xyz/icon.svg",
+    "homeUrl": "https://latpfn.xyz",
+    "splashImageUrl": "https://latpfn.xyz/icon.svg",
+    "splashBackgroundColor": "#0c0c0c",
+    "webhookUrl": "https://latpfn.xyz/api/webhook"
+  }
+}

@@ -7,10 +7,17 @@ import { base, baseSepolia } from "viem/chains";
 
 const queryClient = new QueryClient();
 
+// CDP Paymaster RPC — sponsors gas fees for subscribers
+// Set NEXT_PUBLIC_CDP_API_KEY in Vercel env vars to enable gasless transactions
+const cdpApiKey = process.env.NEXT_PUBLIC_CDP_API_KEY;
+const baseRpc = cdpApiKey
+  ? `https://api.developer.coinbase.com/rpc/v1/base/${cdpApiKey}`
+  : undefined;
+
 const wagmiConfig = createConfig({
   chains: [base, baseSepolia],
   transports: {
-    [base.id]: http(),
+    [base.id]: http(baseRpc),
     [baseSepolia.id]: http(),
   },
   ssr: true,
