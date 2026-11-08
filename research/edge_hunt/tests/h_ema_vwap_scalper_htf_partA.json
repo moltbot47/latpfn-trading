@@ -1,0 +1,686 @@
+{
+ "lot_value": {
+  "NAS100": 10.0,
+  "XAUUSD": 100.0,
+  "GBPJPY": 670.0,
+  "US30": 10.0
+ },
+ "notes": {
+  "GBPJPY": "fixed $6.70/pip (no USDJPY series locally)",
+  "US30": "ASSUMED $10/pt (not user-given)"
+ },
+ "rows": [
+  {
+   "instr": "XAUUSD",
+   "kind": "inv",
+   "logic": "L1",
+   "pick": "L1_all_0.5",
+   "n": 138,
+   "net_100usd_risk_oldcost": -4047,
+   "net_1lot_a": -9276,
+   "fees_a": 1380,
+   "maxdd_a": 10826,
+   "folds_a": [
+    -1722,
+    -8300,
+    747
+   ],
+   "net_1lot_b": -12036,
+   "fees_b": 4140,
+   "maxdd_b": 12826,
+   "folds_b": [
+    -2802,
+    -9080,
+    -153
+   ],
+   "net_1lot_b_sprd35": -14106,
+   "fees_b_sprd35": 6210,
+   "maxdd_b_sprd35": 14326,
+   "folds_b_sprd35": [
+    -3612,
+    -9665,
+    -828
+   ],
+   "net_1lot_c": -14106,
+   "fees_c": 6210,
+   "maxdd_c": 14326,
+   "folds_c": [
+    -3612,
+    -9665,
+    -828
+   ]
+  },
+  {
+   "instr": "XAUUSD",
+   "kind": "inv",
+   "logic": "L2",
+   "pick": "L2_G3_htf_sr_0.618",
+   "n": 1304,
+   "net_100usd_risk_oldcost": -9309,
+   "net_1lot_a": -50042,
+   "fees_a": 13040,
+   "maxdd_a": 71224,
+   "folds_a": [
+    10322,
+    -37776,
+    -22588
+   ],
+   "net_1lot_b": -76122,
+   "fees_b": 39120,
+   "maxdd_b": 89471,
+   "folds_b": [
+    982,
+    -46636,
+    -30468
+   ],
+   "net_1lot_b_sprd35": -95682,
+   "fees_b_sprd35": 58680,
+   "maxdd_b_sprd35": 103661,
+   "folds_b_sprd35": [
+    -6023,
+    -53281,
+    -36378
+   ],
+   "net_1lot_c": -95682,
+   "fees_c": 58680,
+   "maxdd_c": 103661,
+   "folds_c": [
+    -6023,
+    -53281,
+    -36378
+   ]
+  },
+  {
+   "instr": "XAUUSD",
+   "kind": "inv",
+   "logic": "L3",
+   "pick": "L3_2_0.7",
+   "n": 17920,
+   "net_100usd_risk_oldcost": -357432,
+   "net_1lot_a": -1808436,
+   "fees_a": 179200,
+   "maxdd_a": 1808955,
+   "folds_a": [
+    -396389,
+    -832165,
+    -579881
+   ],
+   "net_1lot_b": -2166836,
+   "fees_b": 537600,
+   "maxdd_b": 2167175,
+   "folds_b": [
+    -519949,
+    -948905,
+    -697981
+   ],
+   "net_1lot_b_sprd35": -2435636,
+   "fees_b_sprd35": 806400,
+   "maxdd_b_sprd35": 2435840,
+   "folds_b_sprd35": [
+    -612619,
+    -1036460,
+    -786556
+   ],
+   "net_1lot_c": -2435636,
+   "fees_c": 806400,
+   "maxdd_c": 2435840,
+   "folds_c": [
+    -612619,
+    -1036460,
+    -786556
+   ]
+  },
+  {
+   "instr": "XAUUSD",
+   "kind": "orig",
+   "logic": "L1",
+   "pick": "L1_all_0.25",
+   "n": 146,
+   "net_100usd_risk_oldcost": -1749,
+   "net_1lot_a": -4999,
+   "fees_a": 1460,
+   "maxdd_a": 9734,
+   "folds_a": [
+    1492,
+    -1850,
+    -4641
+   ],
+   "net_1lot_b": -7919,
+   "fees_b": 4380,
+   "maxdd_b": 11113,
+   "folds_b": [
+    452,
+    -2710,
+    -5661
+   ],
+   "net_1lot_b_sprd35": -10109,
+   "fees_b_sprd35": 6570,
+   "maxdd_b_sprd35": 12353,
+   "folds_b_sprd35": [
+    -328,
+    -3355,
+    -6426
+   ],
+   "net_1lot_c": -10109,
+   "fees_c": 6570,
+   "maxdd_c": 12353,
+   "folds_c": [
+    -328,
+    -3355,
+    -6426
+   ]
+  },
+  {
+   "instr": "XAUUSD",
+   "kind": "orig",
+   "logic": "L2",
+   "pick": "L2_G2_pivots_0.618",
+   "n": 1909,
+   "net_100usd_risk_oldcost": -12718,
+   "net_1lot_a": 21141,
+   "fees_a": 19090,
+   "maxdd_a": 73207,
+   "folds_a": [
+    38237,
+    -19075,
+    1979
+   ],
+   "net_1lot_b": -17039,
+   "fees_b": 57270,
+   "maxdd_b": 85242,
+   "folds_b": [
+    25757,
+    -32375,
+    -10421
+   ],
+   "net_1lot_b_sprd35": -45674,
+   "fees_b_sprd35": 85905,
+   "maxdd_b_sprd35": 94497,
+   "folds_b_sprd35": [
+    16397,
+    -42350,
+    -19721
+   ],
+   "net_1lot_c": -45674,
+   "fees_c": 85905,
+   "maxdd_c": 94497,
+   "folds_c": [
+    16397,
+    -42350,
+    -19721
+   ]
+  },
+  {
+   "instr": "XAUUSD",
+   "kind": "orig",
+   "logic": "L3",
+   "pick": "L3_2_0.7",
+   "n": 17145,
+   "net_100usd_risk_oldcost": -71673,
+   "net_1lot_a": -706191,
+   "fees_a": 171450,
+   "maxdd_a": 714355,
+   "folds_a": [
+    -211077,
+    -290704,
+    -204410
+   ],
+   "net_1lot_b": -1049091,
+   "fees_b": 514350,
+   "maxdd_b": 1055235,
+   "folds_b": [
+    -331177,
+    -401444,
+    -316470
+   ],
+   "net_1lot_b_sprd35": -1306266,
+   "fees_b_sprd35": 771525,
+   "maxdd_b_sprd35": 1311925,
+   "folds_b_sprd35": [
+    -421252,
+    -484499,
+    -400515
+   ],
+   "net_1lot_c": -1306266,
+   "fees_c": 771525,
+   "maxdd_c": 1311925,
+   "folds_c": [
+    -421252,
+    -484499,
+    -400515
+   ]
+  },
+  {
+   "instr": "NAS100",
+   "kind": "inv",
+   "logic": "L1",
+   "pick": "L1_all_ema9",
+   "n": 33,
+   "net_100usd_risk_oldcost": -2929,
+   "net_1lot_a": -59,
+   "fees_a": 198,
+   "maxdd_a": 731,
+   "folds_a": [
+    -127,
+    476,
+    -408
+   ],
+   "net_1lot_b": -439,
+   "fees_b": 578,
+   "maxdd_b": 858,
+   "folds_b": [
+    -219,
+    338,
+    -558
+   ],
+   "net_1lot_b_prop": -281,
+   "fees_b_prop": 420,
+   "maxdd_b_prop": 805,
+   "folds_b_prop": [
+    -179,
+    394,
+    -496
+   ],
+   "net_1lot_c": -1511,
+   "fees_c": 1650,
+   "maxdd_c": 1566,
+   "folds_c": [
+    -479,
+    -52,
+    -980
+   ]
+  },
+  {
+   "instr": "NAS100",
+   "kind": "inv",
+   "logic": "L2",
+   "pick": "L2_G2_pivots_0.618",
+   "n": 393,
+   "net_100usd_risk_oldcost": -16508,
+   "net_1lot_a": -11765,
+   "fees_a": 2358,
+   "maxdd_a": 11765,
+   "folds_a": [
+    -1854,
+    -5537,
+    -4374
+   ],
+   "net_1lot_b": -16284,
+   "fees_b": 6878,
+   "maxdd_b": 16284,
+   "folds_b": [
+    -3119,
+    -6986,
+    -6180
+   ],
+   "net_1lot_b_prop": -14413,
+   "fees_b_prop": 5006,
+   "maxdd_b_prop": 14413,
+   "folds_b_prop": [
+    -2569,
+    -6398,
+    -5446
+   ],
+   "net_1lot_c": -29057,
+   "fees_c": 19650,
+   "maxdd_c": 29057,
+   "folds_c": [
+    -6694,
+    -11081,
+    -11282
+   ]
+  },
+  {
+   "instr": "NAS100",
+   "kind": "inv",
+   "logic": "L3",
+   "pick": "L3_2_0.7",
+   "n": 5216,
+   "net_100usd_risk_oldcost": -317450,
+   "net_1lot_a": -108607,
+   "fees_a": 31296,
+   "maxdd_a": 109282,
+   "folds_a": [
+    -27277,
+    -30531,
+    -50799
+   ],
+   "net_1lot_b": -168591,
+   "fees_b": 91280,
+   "maxdd_b": 169151,
+   "folds_b": [
+    -46183,
+    -48989,
+    -73419
+   ],
+   "net_1lot_b_prop": -143650,
+   "fees_b_prop": 66339,
+   "maxdd_b_prop": 144259,
+   "folds_b_prop": [
+    -37961,
+    -41492,
+    -64197
+   ],
+   "net_1lot_c": -338111,
+   "fees_c": 260800,
+   "maxdd_c": 338531,
+   "folds_c": [
+    -99613,
+    -101151,
+    -137347
+   ]
+  },
+  {
+   "instr": "NAS100",
+   "kind": "orig",
+   "logic": "L1",
+   "pick": "L1_all_0.25",
+   "n": 34,
+   "net_100usd_risk_oldcost": -2012,
+   "net_1lot_a": -1029,
+   "fees_a": 204,
+   "maxdd_a": 1134,
+   "folds_a": [
+    -38,
+    -563,
+    -428
+   ],
+   "net_1lot_b": -1420,
+   "fees_b": 595,
+   "maxdd_b": 1502,
+   "folds_b": [
+    -107,
+    -712,
+    -600
+   ],
+   "net_1lot_b_prop": -1257,
+   "fees_b_prop": 433,
+   "maxdd_b_prop": 1350,
+   "folds_b_prop": [
+    -77,
+    -652,
+    -528
+   ],
+   "net_1lot_c": -2525,
+   "fees_c": 1700,
+   "maxdd_c": 2542,
+   "folds_c": [
+    -302,
+    -1135,
+    -1088
+   ]
+  },
+  {
+   "instr": "NAS100",
+   "kind": "orig",
+   "logic": "L2",
+   "pick": "L2_G2_pivots_0.618",
+   "n": 387,
+   "net_100usd_risk_oldcost": -14825,
+   "net_1lot_a": 4737,
+   "fees_a": 2322,
+   "maxdd_a": 2795,
+   "folds_a": [
+    187,
+    2864,
+    1687
+   ],
+   "net_1lot_b": 287,
+   "fees_b": 6772,
+   "maxdd_b": 4574,
+   "folds_b": [
+    -1055,
+    1426,
+    -84
+   ],
+   "net_1lot_b_prop": 2131,
+   "fees_b_prop": 4929,
+   "maxdd_b_prop": 3764,
+   "folds_b_prop": [
+    -514,
+    2009,
+    636
+   ],
+   "net_1lot_c": -12291,
+   "fees_c": 19350,
+   "maxdd_c": 15020,
+   "folds_c": [
+    -4565,
+    -2636,
+    -5089
+   ]
+  },
+  {
+   "instr": "NAS100",
+   "kind": "orig",
+   "logic": "L3",
+   "pick": "L3_2_0.7",
+   "n": 4956,
+   "net_100usd_risk_oldcost": -86636,
+   "net_1lot_a": -76635,
+   "fees_a": 29736,
+   "maxdd_a": 80592,
+   "folds_a": [
+    -17221,
+    -29982,
+    -29433
+   ],
+   "net_1lot_b": -133629,
+   "fees_b": 86730,
+   "maxdd_b": 134083,
+   "folds_b": [
+    -35011,
+    -47427,
+    -51191
+   ],
+   "net_1lot_b_prop": -109938,
+   "fees_b_prop": 63039,
+   "maxdd_b_prop": 111346,
+   "folds_b_prop": [
+    -27272,
+    -40340,
+    -42326
+   ],
+   "net_1lot_c": -294699,
+   "fees_c": 247800,
+   "maxdd_c": 294843,
+   "folds_c": [
+    -85289,
+    -96730,
+    -112681
+   ]
+  },
+  {
+   "instr": "US30",
+   "kind": "inv",
+   "logic": "L1",
+   "pick": "L1_all_0.25",
+   "n": 354,
+   "net_100usd_risk_oldcost": -21123,
+   "net_1lot_c": -14251,
+   "fees_c": 14160,
+   "maxdd_c": 14470,
+   "folds_c": [
+    -2704,
+    -6252,
+    -5295
+   ]
+  },
+  {
+   "instr": "US30",
+   "kind": "inv",
+   "logic": "L2",
+   "pick": "L2_G3_htf_sr_0.618",
+   "n": 4770,
+   "net_100usd_risk_oldcost": -108124,
+   "net_1lot_c": -242655,
+   "fees_c": 190800,
+   "maxdd_c": 248346,
+   "folds_c": [
+    -87662,
+    -81914,
+    -73079
+   ]
+  },
+  {
+   "instr": "US30",
+   "kind": "inv",
+   "logic": "L3",
+   "pick": "L3_2_0.7",
+   "n": 62241,
+   "net_100usd_risk_oldcost": -2067382,
+   "net_1lot_c": -4341093,
+   "fees_c": 2489640,
+   "maxdd_c": 4341093,
+   "folds_c": [
+    -1302114,
+    -1681294,
+    -1357685
+   ]
+  },
+  {
+   "instr": "US30",
+   "kind": "orig",
+   "logic": "L1",
+   "pick": "L1_all_0.25",
+   "n": 351,
+   "net_100usd_risk_oldcost": -12675,
+   "net_1lot_c": -19607,
+   "fees_c": 14040,
+   "maxdd_c": 20150,
+   "folds_c": [
+    -7759,
+    -6088,
+    -5759
+   ]
+  },
+  {
+   "instr": "US30",
+   "kind": "orig",
+   "logic": "L2",
+   "pick": "L2_G3_htf_sr_0.618",
+   "n": 4635,
+   "net_100usd_risk_oldcost": -114803,
+   "net_1lot_c": -238392,
+   "fees_c": 185400,
+   "maxdd_c": 242555,
+   "folds_c": [
+    -84625,
+    -86631,
+    -67135
+   ]
+  },
+  {
+   "instr": "US30",
+   "kind": "orig",
+   "logic": "L3",
+   "pick": "L3_2_0.7",
+   "n": 58269,
+   "net_100usd_risk_oldcost": -509551,
+   "net_1lot_c": -3018315,
+   "fees_c": 2330760,
+   "maxdd_c": 3023698,
+   "folds_c": [
+    -943978,
+    -1125460,
+    -948877
+   ]
+  },
+  {
+   "instr": "GBPJPY",
+   "kind": "inv",
+   "logic": "L1",
+   "pick": "L1_all_0.25",
+   "n": 157,
+   "net_100usd_risk_oldcost": -15686,
+   "net_1lot_c": -3414,
+   "fees_c": 3156,
+   "maxdd_c": 3414,
+   "folds_c": [
+    -1351,
+    -1128,
+    -936
+   ]
+  },
+  {
+   "instr": "GBPJPY",
+   "kind": "inv",
+   "logic": "L2",
+   "pick": "L2_G3_htf_sr_0.618",
+   "n": 1869,
+   "net_100usd_risk_oldcost": -80841,
+   "net_1lot_c": -41735,
+   "fees_c": 37567,
+   "maxdd_c": 41936,
+   "folds_c": [
+    -11977,
+    -14636,
+    -15123
+   ]
+  },
+  {
+   "instr": "GBPJPY",
+   "kind": "inv",
+   "logic": "L3",
+   "pick": "L3_2_0.7",
+   "n": 22597,
+   "net_100usd_risk_oldcost": -1204344,
+   "net_1lot_c": -632435,
+   "fees_c": 454200,
+   "maxdd_c": 632435,
+   "folds_c": [
+    -203179,
+    -223495,
+    -205761
+   ]
+  },
+  {
+   "instr": "GBPJPY",
+   "kind": "orig",
+   "logic": "L1",
+   "pick": "L1_all_0.25",
+   "n": 157,
+   "net_100usd_risk_oldcost": -6693,
+   "net_1lot_c": -3065,
+   "fees_c": 3156,
+   "maxdd_c": 3123,
+   "folds_c": [
+    -851,
+    -1259,
+    -954
+   ]
+  },
+  {
+   "instr": "GBPJPY",
+   "kind": "orig",
+   "logic": "L2",
+   "pick": "L2_G3_htf_sr_0.618",
+   "n": 1833,
+   "net_100usd_risk_oldcost": -82502,
+   "net_1lot_c": -39376,
+   "fees_c": 36843,
+   "maxdd_c": 39494,
+   "folds_c": [
+    -13696,
+    -13665,
+    -12014
+   ]
+  },
+  {
+   "instr": "GBPJPY",
+   "kind": "orig",
+   "logic": "L3",
+   "pick": "L3_2_0.7",
+   "n": 21165,
+   "net_100usd_risk_oldcost": -257302,
+   "net_1lot_c": -431714,
+   "fees_c": 425416,
+   "maxdd_c": 431714,
+   "folds_c": [
+    -154149,
+    -140658,
+    -136906
+   ]
+  }
+ ]
+}
